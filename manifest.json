@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Automação Serviços/Materiais",
+  "version": "1.0",
+  "description": "Importa Excel e cadastra serviços/materiais automaticamente",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["xlsx.full.min.js", "content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_end"
+    }
+  ],
+  "action": {
+    "default_title": "Automação Serviços"
+  },
+  "web_accessible_resources": [{
+    "resources": ["xlsx.full.min.js"],
+    "matches": ["<all_urls>"]
+  }]
+}

@@ -1,0 +1,19 @@
+{
+  "menuCollapse": "//span[@id=\"ott-sidebar-collapse\"]",
+  "linkListaRequisicoes": "//a[@routerlink=\"/requisicoes-eps\"]",
+  "inputFiltroId": "//input[@id=\"filtroId\"]",
+  "btnBuscar": "//a[contains(@class, \"btn-primary\") and contains(text(), \"Buscar\")]",
+  "btnEditar": "//a[contains(@title, \"Editar Requisição\")]",
+  "btnServico": "//a[contains(@title, \"Serviços\")]",
+  "abaMedicaoCampo": "//a[@role=\"tab\" and contains(text(), \"Medição de Campo\")]",
+  "btnInserirMedicao": "//button[contains(text(), \"Inserir Medição de Campo\")]",
+  "inputPrancha": "//input[@id=\"demPrancha\"]",
+  "selectClasse": "//select[@id=\"demClasse\"]",
+  "inputMaraCode": "//input[@placeholder=\"Mara Code\"]",
+  "selectItem": "//select[@id=\"maraCode\"]",
+  "inputQtdServico": "//input[@id=\"qtdServicoExecutado\"]",
+  "inputPesquisaMaterial": "//input[@placeholder=\"Material\"]",
+  "selectMaterial": "//select[@id=\"matCode\"]",
+  "inputQtdMaterial": "//input[@id=\"qtdMaterial\"]",
+  "inputLocalObra": "//input[@id=\"localObra\"]"
+}

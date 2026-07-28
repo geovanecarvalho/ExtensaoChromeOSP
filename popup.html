@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Automação Serviços/Materiais</title>
+    <style>
+        body {
+            width: 550px;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: #f8f9fa;
+        }
+        
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        
+        .header .icon { font-size: 28px; }
+        .header h2 {
+            margin: 0;
+            color: #212529;
+            font-size: 18px;
+        }
+        .header .badge {
+            margin-left: auto;
+            background: #28a745;
+            color: white;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+        }
+        
+        .upload-area {
+            border: 2px dashed #dee2e6;
+            border-radius: 8px;
+            padding: 25px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: white;
+            margin-bottom: 15px;
+        }
+        
+        .upload-area:hover {
+            border-color: #28a745;
+            background: #f8fff9;
+        }
+        
+        .upload-area .icon-upload { font-size: 40px; margin-bottom: 8px; }
+        .upload-area .text { font-size: 14px; color: #495057; }
+        .upload-area .subtext { font-size: 12px; color: #6c757d; margin-top: 4px; }
+        
+        .file-info {
+            background: white;
+            padding: 12px 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+            border-left: 3px solid #28a745;
+            display: none;
+        }
+        .file-info .name { font-weight: 500; color: #212529; }
+        .file-info .size { color: #6c757d; font-size: 12px; }
+        .file-info .rows { font-size: 12px; color: #28a745; font-weight: 500; }
+        
+        /* ===== PRÉ-VISUALIZAÇÃO MELHORADA ===== */
+        .preview-container {
+            background: white;
+            border-radius: 6px;
+            border: 1px solid #e9ecef;
+            margin: 10px 0;
+            padding: 10px;
+            display: none;
+            max-height: 250px;
+            overflow: auto;
+        }
+        
+        .preview-container .preview-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            background: white;
+            padding: 4px 0;
+            z-index: 1;
+        }
+        
+        .preview-container table {
+            width: 100%;
+            font-size: 12px;
+            border-collapse: collapse;
+        }
+        
+        .preview-container th {
+            background: #f8f9fa;
+            padding: 8px 10px;
+            text-align: left;
+            font-weight: 600;
+            color: #495057;
+            border-bottom: 2px solid #dee2e6;
+            position: sticky;
+            top: 32px;
+            z-index: 1;
+            white-space: nowrap;
+            min-width: 80px;
+        }
+        
+        .preview-container td {
+            padding: 6px 10px;
+            border-bottom: 1px solid #e9ecef;
+            max-width: 150px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .preview-container tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .preview-container tbody tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+        
+        .preview-container tbody tr:nth-child(even):hover {
+            background-color: #f0f0f0;
+        }
+        
+        /* Scroll personalizado */
+        .preview-container::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        
+        .preview-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+        
+        .preview-container::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 3px;
+        }
+        
+        .preview-container::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        
+        .stats {
+            display: flex;
+            gap: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 6px;
+            margin: 10px 0;
+            border: 1px solid #e9ecef;
+        }
+        .stats .item {
+            flex: 1;
+            text-align: center;
+        }
+        .stats .number {
+            font-size: 18px;
+            font-weight: 600;
+            color: #28a745;
+        }
+        .stats .label { font-size: 11px; color: #6c757d; }
+        
+        .btn-primary {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(40,167,69,0.3); }
+        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+        
+        .btn-secondary {
+            width: 100%;
+            padding: 8px;
+            background: #e9ecef;
+            color: #495057;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 6px;
+        }
+        .btn-secondary:hover { background: #dee2e6; }
+        
+        .mapping-info {
+            background: #e7f3ff;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #004085;
+            margin: 10px 0;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+        .status-indicator.ready { background: #28a745; }
+        .status-indicator.running { background: #ffc107; animation: blink 1s infinite; }
+        .status-indicator.error { background: #dc3545; }
+        
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        
+        .footer { 
+            margin-top: 15px; 
+            text-align: center; 
+            font-size: 11px; 
+            color: #6c757d;
+        }
+        
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+            padding: 8px 12px;
+            background: white;
+            border-radius: 6px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .status-bar .status-text {
+            font-size: 13px;
+            color: #495057;
+        }
+        
+        /* Colunas expandidas */
+        .col-expand {
+            min-width: 120px !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <span class="icon">🔧</span>
+        <h2>Automação Serviços</h2>
+        <span class="badge">v2.0</span>
+    </div>
+    
+    <div class="status-bar">
+        <span class="status-indicator ready" id="statusIndicator"></span>
+        <span class="status-text" id="statusText">Pronto para importar</span>
+    </div>
+    
+    <div class="upload-area" id="uploadArea">
+        <div class="icon-upload">📊</div>
+        <div class="text"><strong>Clique para selecionar</strong> ou arraste seu Excel</div>
+        <div class="subtext">Suporta: .xlsx, .xls, .csv</div>
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display:none">
+    </div>
+    
+    <div class="file-info" id="fileInfo">
+        <div>
+            <span class="name" id="fileName">arquivo.xlsx</span>
+            <span class="size" id="fileSize"> - 0 KB</span>
+        </div>
+        <div class="rows" id="fileRows">0 linhas</div>
+    </div>
+    
+    <!-- PRÉ-VISUALIZAÇÃO MELHORADA -->
+    <div class="preview-container" id="previewContainer">
+        <div class="preview-title">
+            <span>📋 Pré-visualização dos dados</span>
+            <span style="font-weight: normal; color: #6c757d; font-size: 11px;" id="previewInfo">5 linhas</span>
+        </div>
+        <div id="previewContent"></div>
+    </div>
+    
+    <div class="stats" id="statsContainer" style="display: none;">
+        <div class="item">
+            <div class="number" id="totalRows">0</div>
+            <div class="label">Registros</div>
+        </div>
+        <div class="item">
+            <div class="number" id="totalCols">0</div>
+            <div class="label">Campos</div>
+        </div>
+        <div class="item">
+            <div class="number" id="statusCount">⏸️</div>
+            <div class="label">Status</div>
+        </div>
+    </div>
+    
+    <div class="mapping-info">
+        <strong>📋 Colunas esperadas:</strong><br>
+        ID | PRANCHA | CLASSE | MARACODE | ITEM | QTD SERVICO EXECUTADO | 
+        PESQUISA MATERIAL | MATERIAL | QTD MATERIAL | LOCAL EXECUCAO OBRA
+    </div>
+    
+    <button class="btn-primary" id="btnExecutar" disabled>
+        🚀 Executar Automação
+    </button>
+    
+    <button class="btn-secondary" id="btnLimpar" style="color: #dc3545;">
+        🗑️ Limpar Dados
+    </button>
+    
+    <div class="footer">
+        🔧 Automação de Serviços/Materiais
+    </div>
+    
+    <script src="popup.js"></script>
+    <script src="xlsx.full.min.js"></script>
+</body>
+</html>

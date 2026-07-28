@@ -1,0 +1,95 @@
+/* Estilos da interface */
+#auto-interface {
+    font-family: Arial, sans-serif;
+}
+
+#auto-interface .log-entry {
+    padding: 2px 4px;
+    border-bottom: 1px solid #f1f3f5;
+    font-size: 11px;
+}
+
+#auto-interface .log-success { color: #28a745; }
+#auto-interface .log-error { color: #dc3545; }
+#auto-interface .log-warning { color: #ffc107; }
+#auto-interface .log-info { color: #17a2b8; }
+
+#auto-interface .progress {
+    background-color: #e9ecef;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+#auto-interface .progress-bar {
+    transition: width 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: bold;
+    color: white;
+}
+
+/* Estilos do botão na página */
+.btn-auto-import {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%) !important;
+    color: white !important;
+    border: none !important;
+    padding: 6px 16px !important;
+    border-radius: 4px !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    transition: all 0.3s ease !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3) !important;
+    height: 32px !important;
+    line-height: 1 !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+
+.btn-auto-import:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4) !important;
+}
+
+.btn-auto-import:active {
+    transform: scale(0.97) !important;
+}
+
+/* Animação do popup */
+@keyframes popupFadeIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+    }
+}
+
+/* Scroll personalizado */
+#auto-log::-webkit-scrollbar,
+#popup-preview::-webkit-scrollbar {
+    width: 4px;
+}
+
+#auto-log::-webkit-scrollbar-track,
+#popup-preview::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 2px;
+}
+
+#auto-log::-webkit-scrollbar-thumb,
+#popup-preview::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 2px;
+}
+
+#auto-log::-webkit-scrollbar-thumb:hover,
+#popup-preview::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
