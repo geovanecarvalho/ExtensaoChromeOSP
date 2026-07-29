@@ -374,7 +374,133 @@
         }
     }
     
-    // ===== FUNÇÃO PARA ATUALIZAR STATUS DO POPUP =====
+    // ===== FUNÇÃO PARA MOSTRAR ALERTA DE FINALIZAÇÃO =====
+    function mostrarAlertaFinalizacao() {
+        const sucessos = relatorio.filter(r => r.status === 'sucesso').length;
+        const erros = relatorio.filter(r => r.status === 'erro').length;
+        const pulados = relatorio.filter(r => r.status === 'pulado').length;
+        const total = relatorio.length;
+        
+        // Cria o alerta
+        const alerta = document.createElement('div');
+        alerta.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 99999;
+            background: white;
+            padding: 30px 40px;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            min-width: 400px;
+            max-width: 500px;
+            text-align: center;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            animation: alertaFadeIn 0.4s ease;
+        `;
+        
+        const icon = erros > 0 ? '⚠️' : '✅';
+        const cor = erros > 0 ? '#dc3545' : '#28a745';
+        const titulo = erros > 0 ? 'Processo Finalizado!' : 'Processo Finalizado com Sucesso!';
+        
+        alerta.innerHTML = `
+            <div style="font-size: 48px; margin-bottom: 10px;">${icon}</div>
+            <h2 style="color: ${cor}; margin: 0 0 15px 0; font-size: 22px;">${titulo}</h2>
+            <div style="display: flex; gap: 15px; justify-content: center; margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                <div>
+                    <div style="font-size: 28px; font-weight: 600; color: #28a745;">${sucessos}</div>
+                    <div style="font-size: 12px; color: #6c757d;">✅ Sucessos</div>
+                </div>
+                <div>
+                    <div style="font-size: 28px; font-weight: 600; color: #dc3545;">${erros}</div>
+                    <div style="font-size: 12px; color: #6c757d;">❌ Erros</div>
+                </div>
+                <div>
+                    <div style="font-size: 28px; font-weight: 600; color: #ffc107;">${pulados}</div>
+                    <div style="font-size: 12px; color: #6c757d;">⏭️ Pulados</div>
+                </div>
+                <div>
+                    <div style="font-size: 28px; font-weight: 600; color: #17a2b8;">${total}</div>
+                    <div style="font-size: 12px; color: #6c757d;">📊 Total</div>
+                </div>
+            </div>
+            <div style="font-size: 13px; color: #6c757d; margin-bottom: 15px;">
+                Clique em "Ver Relatório" para detalhes
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button id="btn-alerta-fechar" style="
+                    padding: 8px 25px;
+                    background: #6c757d;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    transition: all 0.3s ease;
+                ">Fechar</button>
+                <button id="btn-alerta-relatorio" style="
+                    padding: 8px 25px;
+                    background: #17a2b8;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    transition: all 0.3s ease;
+                ">📊 Ver Relatório</button>
+            </div>
+        `;
+        
+        document.body.appendChild(alerta);
+        
+        // Adiciona estilos da animação
+        if (!document.getElementById('alerta-styles')) {
+            const style = document.createElement('style');
+            style.id = 'alerta-styles';
+            style.textContent = `
+                @keyframes alertaFadeIn {
+                    from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+                    to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
+        // Overlay de fundo
+        const overlay = document.createElement('div');
+        overlay.id = 'alerta-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 99998;
+            animation: alertaFadeIn 0.3s ease;
+        `;
+        document.body.appendChild(overlay);
+        
+        // Eventos dos botões
+        document.getElementById('btn-alerta-fechar').addEventListener('click', () => {
+            alerta.remove();
+            overlay.remove();
+        });
+        
+        document.getElementById('btn-alerta-relatorio').addEventListener('click', () => {
+            alerta.remove();
+            overlay.remove();
+            baixarRelatorio();
+        });
+        
+        // Fecha ao clicar no overlay
+        overlay.addEventListener('click', () => {
+            alerta.remove();
+            overlay.remove();
+        });
+    }
+    
     function atualizarStatusPopup() {
         const statusText = document.getElementById('popup-status-text');
         if (statusText) {
@@ -839,6 +965,11 @@
         
         // Atualiza status final
         atualizarStatusPopup();
+        
+        // ============================================
+        // MOSTRA ALERTA DE FINALIZAÇÃO
+        // ============================================
+        mostrarAlertaFinalizacao();
     }
     
     function atualizarProgresso(atual, total) {
@@ -944,7 +1075,7 @@
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid #e9ecef;">
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <span style="font-size: 22px;">⚡</span>
-                    <h3 style="margin: 0; color: #212529; font-size: 16px;">Cadastramento de  Serviços e Materiais</h3>
+                    <h3 style="margin: 0; color: #212529; font-size: 16px;">Cadastramento automático (serviços/materiais)</h3>
                 </div>
                 <button id="btn-fechar-popup" style="
                     background: none;
