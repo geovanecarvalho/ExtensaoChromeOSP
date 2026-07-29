@@ -37,19 +37,18 @@
             selectItem: '//select[@id="maraCode"]',
             inputQtdServico: '//input[@id="qtdServicoExecutado"]',
             inputPesquisaMaterial: '//input[@placeholder="Material"]',
-            selectMaterial: '//select[@id="matCode"]',
             inputQtdMaterial: '//input[@id="qtdMaterial"]',
             inputLocalObra: '//input[@id="localObra"]'
         },
         
-        delayEntreCadastros: 4000,
-        delayPreenchimento: 500,
-        delayAposBusca: 3000,
-        delayAposClick: 1500,
-        delayAposNavegacao: 3000,
-        delayAposSalvar: 4000,
-        delayAposEnter: 1000,
-        delayAposFechar: 1000,
+        delayEntreCadastros: 1500,
+        delayPreenchimento: 200,
+        delayAposBusca: 1500,
+        delayAposClick: 500,
+        delayAposNavegacao: 1500,
+        delayAposSalvar: 3000,
+        delayAposEnter: 300,
+        delayAposFechar: 500,
         modoTeste: false
     };
     
@@ -59,6 +58,8 @@
     let podeParar = false;
     let log = [];
     let popupAberto = false;
+    let relatorio = [];
+    let contadores = { sucessos: 0, erros: 0, pulados: 0 };
     
     // ===== FUNÇÕES AUXILIARES =====
     
@@ -66,7 +67,7 @@
         return new Promise(resolve => setTimeout(resolve, ms));
     }
     
-    function waitForElement(selector, timeout = 15000) {
+    function waitForElement(selector, timeout = 8000) {
         return new Promise((resolve) => {
             const startTime = Date.now();
             
@@ -100,7 +101,7 @@
                     return;
                 }
                 
-                setTimeout(findElement, 300);
+                setTimeout(findElement, 200);
             }
             
             findElement();
@@ -108,10 +109,8 @@
     }
     
     async function waitForIdField() {
-        console.log('⏳ Aguardando campo ID ficar disponível...');
-        
         let tentativas = 0;
-        const maxTentativas = 30;
+        const maxTentativas = 20;
         
         while (tentativas < maxTentativas) {
             let inputId = null;
@@ -133,13 +132,12 @@
             if (inputId) {
                 const isVisible = inputId.offsetParent !== null && inputId.offsetWidth > 0;
                 if (isVisible) {
-                    console.log('✅ Campo ID encontrado e visível!');
                     return inputId;
                 }
             }
             
             tentativas++;
-            await wait(500);
+            await wait(300);
         }
         
         return null;
@@ -152,7 +150,7 @@
         }
         try {
             element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            await wait(500);
+            await wait(200);
             
             try {
                 element.click();
@@ -165,7 +163,6 @@
                 element.dispatchEvent(event);
             }
             
-            addLog(`✅ Clicou em: ${descricao}`, 'success');
             await wait(CONFIG.delayAposClick);
             return true;
         } catch (e) {
@@ -174,18 +171,12 @@
         }
     }
     
-    async function preencherCampo(elemento, valor, descricao = '') {
-        if (!elemento) {
-            addLog(`⚠️ Campo não encontrado: ${descricao}`, 'warning');
-            return false;
-        }
-        if (valor === undefined || valor === null || valor === '') {
-            addLog(`⏭️ Campo vazio: ${descricao}`, 'info');
-            return true;
-        }
+    async function preencherCampoRapido(elemento, valor, descricao = '') {
+        if (!elemento) return false;
+        if (valor === undefined || valor === null || valor === '') return true;
         try {
             elemento.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            await wait(300);
+            await wait(100);
             
             if (elemento.tagName === 'SELECT') {
                 const valorStr = String(valor).trim();
@@ -207,30 +198,24 @@
                 }
                 const event = new Event('change', { bubbles: true });
                 elemento.dispatchEvent(event);
-                addLog(`✅ Preencheu select: ${descricao} = ${valor}`, 'success');
                 return true;
             } else if (elemento.tagName === 'INPUT' || elemento.tagName === 'TEXTAREA') {
                 elemento.value = '';
                 elemento.focus();
-                await wait(200);
+                await wait(50);
                 
-                const chars = String(valor).split('');
-                for (let i = 0; i < chars.length; i++) {
-                    elemento.value += chars[i];
-                    const event = new Event('input', { bubbles: true });
-                    elemento.dispatchEvent(event);
-                    await wait(50);
-                }
+                elemento.value = String(valor);
+                const event = new Event('input', { bubbles: true });
+                elemento.dispatchEvent(event);
                 
                 elemento.blur();
-                await wait(200);
+                await wait(50);
                 
                 ['change', 'blur'].forEach(eventType => {
                     const event = new Event(eventType, { bubbles: true });
                     elemento.dispatchEvent(event);
                 });
                 
-                addLog(`✅ Preencheu campo: ${descricao} = ${valor}`, 'success');
                 return true;
             }
             return false;
@@ -241,76 +226,27 @@
     }
     
     async function preencherId(inputId, valor) {
-        if (!inputId) {
-            addLog('❌ Elemento ID é nulo', 'error');
-            return false;
-        }
+        if (!inputId) return false;
+        if (valor === undefined || valor === null || valor === '') return false;
         
-        if (valor === undefined || valor === null || valor === '') {
-            addLog(`⚠️ Valor do ID é inválido: "${valor}"`, 'warning');
-            return false;
-        }
+        inputId.focus();
+        await wait(100);
+        inputId.value = '';
+        inputId.value = String(valor);
+        inputId.dispatchEvent(new Event('input', { bubbles: true }));
+        inputId.dispatchEvent(new Event('change', { bubbles: true }));
+        inputId.blur();
+        await wait(100);
         
-        addLog(`🔢 Tentando preencher ID: ${valor}`, 'info');
-        
-        const estrategias = [
-            async () => {
-                inputId.focus();
-                await wait(300);
-                inputId.value = '';
-                inputId.value = String(valor);
-                inputId.dispatchEvent(new Event('input', { bubbles: true }));
-                inputId.dispatchEvent(new Event('change', { bubbles: true }));
-                inputId.blur();
-                return inputId.value === String(valor);
-            },
-            async () => {
-                inputId.click();
-                await wait(200);
-                inputId.value = String(valor);
-                inputId.dispatchEvent(new Event('change', { bubbles: true }));
-                return inputId.value === String(valor);
-            },
-            async () => {
-                inputId.value = String(valor);
-                const event = new Event('change', { bubbles: true });
-                inputId.dispatchEvent(event);
-                return inputId.value === String(valor);
-            }
-        ];
-        
-        for (let i = 0; i < estrategias.length; i++) {
-            try {
-                const success = await estrategias[i]();
-                if (success) {
-                    addLog(`✅ ID preenchido com sucesso: ${valor} (estratégia ${i + 1})`, 'success');
-                    return true;
-                }
-            } catch (e) {
-                addLog(`⚠️ Estratégia ${i + 1} falhou: ${e.message}`, 'warning');
-            }
-            await wait(200);
-        }
-        
-        if (inputId.value === String(valor)) {
-            addLog(`✅ ID preenchido (verificação final): ${valor}`, 'success');
-            return true;
-        }
-        
-        addLog(`❌ Falha ao preencher ID. Valor atual: "${inputId.value}"`, 'error');
-        return false;
+        return inputId.value === String(valor);
     }
     
-    // ===== FUNÇÃO PARA PRESSIONAR ENTER EM UM CAMPO =====
     async function pressionarEnter(elemento, descricao = '') {
-        if (!elemento) {
-            addLog(`⚠️ Elemento não encontrado para pressionar Enter: ${descricao}`, 'warning');
-            return false;
-        }
+        if (!elemento) return false;
         
         try {
             elemento.focus();
-            await wait(200);
+            await wait(100);
             
             const enterEvent = new KeyboardEvent('keydown', {
                 key: 'Enter',
@@ -332,22 +268,46 @@
             });
             elemento.dispatchEvent(keyupEvent);
             
-            addLog(`✅ Enter pressionado em: ${descricao}`, 'success');
             await wait(CONFIG.delayAposEnter);
             return true;
         } catch (e) {
-            addLog(`❌ Erro ao pressionar Enter em ${descricao}: ${e.message}`, 'error');
             return false;
         }
     }
     
-    function detectarColunas(data) {
-        if (!data || data.length === 0) {
-            return null;
+    function verificarMensagemRetorno() {
+        const mensagemSucesso = document.querySelector('.alert-success');
+        if (mensagemSucesso) {
+            const texto = mensagemSucesso.textContent.trim();
+            addLog(`✅ ${texto}`, 'success');
+            return { status: 'sucesso', mensagem: texto };
         }
         
+        const mensagemErro = document.querySelector('.alert-danger');
+        if (mensagemErro) {
+            const texto = mensagemErro.textContent.trim();
+            addLog(`❌ ${texto}`, 'error');
+            return { status: 'erro', mensagem: texto };
+        }
+        
+        const mensagens = document.querySelectorAll('.alert');
+        for (const msg of mensagens) {
+            if (msg.textContent.includes('sucesso') || msg.textContent.includes('Sucesso')) {
+                return { status: 'sucesso', mensagem: msg.textContent.trim() };
+            }
+            if (msg.textContent.includes('erro') || msg.textContent.includes('Erro') || msg.textContent.includes('obrigatório')) {
+                return { status: 'erro', mensagem: msg.textContent.trim() };
+            }
+        }
+        
+        return null;
+    }
+    
+    function detectarColunas(data) {
+        if (!data || data.length === 0) return null;
+        
         const headers = Object.keys(data[0]);
-        addLog(`📋 Colunas encontradas no Excel: ${headers.join(', ')}`, 'info');
+        addLog(`📋 Colunas: ${headers.join(', ')}`, 'info');
         
         const mapeamento = {};
         const colunasEsperadas = {
@@ -364,31 +324,26 @@
         };
         
         for (const [campo, variacoes] of Object.entries(colunasEsperadas)) {
-            let encontrado = false;
             for (const variacao of variacoes) {
                 const chave = headers.find(h => 
                     h.toLowerCase().trim() === variacao.toLowerCase().trim()
                 );
                 if (chave) {
                     mapeamento[campo] = chave;
-                    encontrado = true;
-                    addLog(`✅ Mapeou "${campo}" -> coluna "${chave}"`, 'success');
                     break;
                 }
             }
-            if (!encontrado) {
+            if (!mapeamento[campo]) {
                 for (const header of headers) {
                     const headerLower = header.toLowerCase().trim();
                     for (const variacao of variacoes) {
                         if (headerLower.includes(variacao.toLowerCase().trim()) || 
                             variacao.toLowerCase().trim().includes(headerLower)) {
                             mapeamento[campo] = header;
-                            encontrado = true;
-                            addLog(`✅ Mapeou "${campo}" -> coluna "${header}" (similar)`, 'success');
                             break;
                         }
                     }
-                    if (encontrado) break;
+                    if (mapeamento[campo]) break;
                 }
             }
         }
@@ -398,7 +353,6 @@
             addLog(`⚠️ Usando primeira coluna como ID: "${headers[0]}"`, 'warning');
         }
         
-        addLog(`📊 Mapeamento final: ${JSON.stringify(mapeamento, null, 2)}`, 'info');
         return mapeamento;
     }
     
@@ -409,7 +363,6 @@
             tipo
         };
         log.push(entry);
-        console.log(`[${entry.timestamp}] ${mensagem}`);
         
         const logContainer = document.getElementById('auto-log');
         if (logContainer) {
@@ -419,297 +372,293 @@
             logContainer.appendChild(div);
             logContainer.scrollTop = logContainer.scrollHeight;
         }
-        
-        const status = document.getElementById('auto-status');
-        if (status) {
-            status.textContent = mensagem;
+    }
+    
+    // ===== FUNÇÃO PARA ATUALIZAR STATUS DO POPUP =====
+    function atualizarStatusPopup() {
+        const statusText = document.getElementById('popup-status-text');
+        if (statusText) {
+            const total = relatorio.length;
+            const sucessos = relatorio.filter(r => r.status === 'sucesso').length;
+            const erros = relatorio.filter(r => r.status === 'erro').length;
+            const pulados = relatorio.filter(r => r.status === 'pulado').length;
+            
+            if (total > 0) {
+                statusText.textContent = `✅ ${sucessos} OK | ❌ ${erros} ERRO | ⏭️ ${pulados} PULADO`;
+                statusText.style.color = erros > 0 ? '#dc3545' : '#28a745';
+            }
         }
+    }
+    
+    function gerarRelatorio() {
+        if (relatorio.length === 0) {
+            addLog('⚠️ Nenhum dado para gerar relatório', 'warning');
+            return;
+        }
+        
+        const sucessos = relatorio.filter(r => r.status === 'sucesso').length;
+        const erros = relatorio.filter(r => r.status === 'erro').length;
+        const pulados = relatorio.filter(r => r.status === 'pulado').length;
+        
+        let relatorioTexto = '========================================\n';
+        relatorioTexto += 'RELATÓRIO DE CADASTRO DE SERVIÇOS/MATERIAIS\n';
+        relatorioTexto += `Data: ${new Date().toLocaleString()}\n`;
+        relatorioTexto += `Total de registros: ${relatorio.length}\n`;
+        relatorioTexto += '========================================\n\n';
+        
+        relatorioTexto += `✅ Sucessos: ${sucessos}\n`;
+        relatorioTexto += `❌ Erros: ${erros}\n`;
+        relatorioTexto += `⏭️ Pulados: ${pulados}\n`;
+        relatorioTexto += `📊 Total: ${relatorio.length}\n`;
+        relatorioTexto += '========================================\n\n';
+        
+        relatorioTexto += 'DETALHES DOS REGISTROS:\n';
+        relatorioTexto += '----------------------------------------\n';
+        
+        relatorio.forEach((item, index) => {
+            const statusEmoji = item.status === 'sucesso' ? '✅' : 
+                               item.status === 'erro' ? '❌' : '⏭️';
+            const statusLabel = item.status.toUpperCase();
+            relatorioTexto += `${index + 1}. ID: ${item.id} - ${statusEmoji} ${statusLabel}\n`;
+            if (item.mensagem) {
+                relatorioTexto += `   Mensagem: ${item.mensagem}\n`;
+            }
+            if (item.erro) {
+                relatorioTexto += `   Erro: ${item.erro}\n`;
+            }
+            relatorioTexto += `   Dados: ${JSON.stringify(item.dados)}\n`;
+            relatorioTexto += '----------------------------------------\n';
+        });
+        
+        relatorioTexto += '\n========================================\n';
+        relatorioTexto += 'FIM DO RELATÓRIO\n';
+        relatorioTexto += '========================================\n';
+        
+        return relatorioTexto;
+    }
+    
+    function baixarRelatorio() {
+        const relatorioTexto = gerarRelatorio();
+        if (!relatorioTexto) return;
+        
+        const blob = new Blob([relatorioTexto], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `relatorio_cadastro_${new Date().toISOString().slice(0,10)}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        addLog(`📥 Relatório baixado com ${relatorio.length} registros`, 'success');
     }
     
     async function executarCadastro(dados, index) {
         const idValue = dados['ID'] || dados['id'] || dados['Id'];
         
-        if (idValue === undefined || idValue === null || idValue === '') {
+        if (!idValue) {
+            const erro = 'ID vazio';
             addLog(`❌ Registro ${index + 1} sem ID! Pulando...`, 'error');
-            return { sucesso: false, erro: 'ID vazio', pulado: true };
+            relatorio.push({
+                id: 'N/A',
+                status: 'pulado',
+                mensagem: 'ID vazio',
+                dados: dados,
+                erro: erro
+            });
+            atualizarStatusPopup();
+            return { sucesso: false, erro: erro, pulado: true };
         }
         
-        addLog(`📝 Iniciando cadastro do ID: ${idValue}`, 'info');
+        addLog(`📝 ID: ${idValue}`, 'info');
         
         try {
-            // ============================================
-            // PASSO 1: CLICAR NO COLLAPSE (MENU)
-            // ============================================
-            addLog('🔍 Passo 1: Abrindo menu (collapse)...', 'info');
-            const menuElement = await waitForElement('//span[@id="ott-sidebar-collapse"]');
-            if (!await clickElement(menuElement, 'Menu Collapse')) {
-                return { sucesso: false, erro: 'Menu Collapse não encontrado' };
+            // ===== PASSO 1: COLLAPSE =====
+            const menuElement = await waitForElement('//span[@id="ott-sidebar-collapse"]', 5000);
+            if (!await clickElement(menuElement, 'Menu')) {
+                const erro = 'Menu não encontrado';
+                relatorio.push({ id: idValue, status: 'erro', mensagem: erro, dados: dados, erro: erro });
+                atualizarStatusPopup();
+                return { sucesso: false, erro: erro };
             }
-            await wait(500);
+            await wait(200);
             
-            // ============================================
-            // PASSO 2: CLICAR NO LINK LISTA REQUISIÇÕES EPS
-            // ============================================
-            addLog('🔍 Passo 2: Navegando para Lista Requisições EPS...', 'info');
-            const listaElement = await waitForElement('//a[@routerlink="/requisicoes-eps"]');
-            if (!await clickElement(listaElement, 'Link Lista Requisições EPS')) {
-                return { sucesso: false, erro: 'Link Lista Requisições EPS não encontrado' };
+            // ===== PASSO 2: LISTA REQUISIÇÕES =====
+            const listaElement = await waitForElement('//a[@routerlink="/requisicoes-eps"]', 5000);
+            if (!await clickElement(listaElement, 'Lista EPS')) {
+                const erro = 'Lista não encontrada';
+                relatorio.push({ id: idValue, status: 'erro', mensagem: erro, dados: dados, erro: erro });
+                atualizarStatusPopup();
+                return { sucesso: false, erro: erro };
             }
             
-            addLog('⏳ Aguardando carregamento da página de requisições...', 'info');
             await wait(CONFIG.delayAposNavegacao);
             
-            // ============================================
-            // PASSO 3: PREENCHER ID
-            // ============================================
-            addLog(`🔍 Passo 3: Buscando e preenchendo ID ${idValue}...`, 'info');
-            
+            // ===== PASSO 3: PREENCHER ID =====
             const inputId = await waitForIdField();
-            
             if (!inputId) {
-                const inputIdFallback = document.querySelector('#filtroId');
-                if (inputIdFallback) {
-                    const preenchido = await preencherId(inputIdFallback, idValue);
-                    if (!preenchido) {
-                        return { sucesso: false, erro: 'Falha ao preencher ID' };
-                    }
+                const fallback = document.querySelector('#filtroId');
+                if (fallback) {
+                    await preencherId(fallback, idValue);
                 } else {
-                    return { sucesso: false, erro: 'Campo ID não encontrado' };
+                    const erro = 'Campo ID não encontrado';
+                    relatorio.push({ id: idValue, status: 'erro', mensagem: erro, dados: dados, erro: erro });
+                    atualizarStatusPopup();
+                    return { sucesso: false, erro: erro };
                 }
             } else {
-                const preenchido = await preencherId(inputId, idValue);
-                if (!preenchido) {
-                    return { sucesso: false, erro: 'Falha ao preencher ID' };
-                }
+                await preencherId(inputId, idValue);
             }
             
-            // ============================================
-            // PASSO 4: BUSCAR
-            // ============================================
-            addLog('🔍 Passo 4: Buscando requisição...', 'info');
-            const btnBuscar = await waitForElement('//a[contains(@class, "btn-primary") and contains(text(), "Buscar")]');
+            // ===== PASSO 4: BUSCAR =====
+            const btnBuscar = await waitForElement('//a[contains(@class, "btn-primary") and contains(text(), "Buscar")]', 5000);
             if (!btnBuscar) {
-                const btnBuscarCSS = document.querySelector('.btn-primary.btn-sm.btn-block');
-                if (btnBuscarCSS) {
-                    await clickElement(btnBuscarCSS, 'Botão Buscar (CSS)');
-                } else {
-                    return { sucesso: false, erro: 'Botão Buscar não encontrado' };
+                const btnCSS = document.querySelector('.btn-primary.btn-sm.btn-block');
+                if (btnCSS) await clickElement(btnCSS, 'Buscar');
+                else {
+                    const erro = 'Botão Buscar não encontrado';
+                    relatorio.push({ id: idValue, status: 'erro', mensagem: erro, dados: dados, erro: erro });
+                    atualizarStatusPopup();
+                    return { sucesso: false, erro: erro };
                 }
             } else {
-                await clickElement(btnBuscar, 'Botão Buscar');
+                await clickElement(btnBuscar, 'Buscar');
             }
             
             await wait(CONFIG.delayAposBusca);
             
-            // ============================================
-            // PASSO 5: EDITAR
-            // ============================================
-            addLog('🔍 Passo 5: Verificando botão Editar...', 'info');
-            const btnEditar = await waitForElement('//a[contains(@title, "Editar Requisição")]', 5000);
-            
+            // ===== PASSO 5: EDITAR =====
+            const btnEditar = await waitForElement('//a[contains(@title, "Editar Requisição")]', 4000);
             if (!btnEditar) {
-                const btnEditarCSS = document.querySelector('a[title="Editar Requisição"]');
-                if (btnEditarCSS) {
-                    await clickElement(btnEditarCSS, 'Botão Editar');
-                } else {
-                    addLog(`⚠️ ID ${idValue} não possui botão Editar. Pulando...`, 'warning');
-                    return { sucesso: false, erro: 'Sem botão Editar', pulado: true };
+                const btnCSS = document.querySelector('a[title="Editar Requisição"]');
+                if (btnCSS) await clickElement(btnCSS, 'Editar');
+                else {
+                    addLog(`⚠️ ID ${idValue} sem Editar`, 'warning');
+                    relatorio.push({ id: idValue, status: 'pulado', mensagem: 'Sem botão Editar', dados: dados });
+                    atualizarStatusPopup();
+                    return { sucesso: false, erro: 'Sem Editar', pulado: true };
                 }
             } else {
-                await clickElement(btnEditar, 'Botão Editar');
+                await clickElement(btnEditar, 'Editar');
             }
             
-            // ============================================
-            // PASSO 6: SERVIÇOS
-            // ============================================
-            addLog('🔍 Passo 6: Acessando serviços...', 'info');
-            const btnServico = await waitForElement('//a[contains(@title, "Serviços")]');
+            // ===== PASSO 6: SERVIÇOS =====
+            const btnServico = await waitForElement('//a[contains(@title, "Serviços")]', 4000);
             if (!btnServico) {
-                const btnServicoCSS = document.querySelector('a[title="Serviços"]');
-                if (btnServicoCSS) {
-                    await clickElement(btnServicoCSS, 'Botão Serviço (CSS)');
-                } else {
-                    return { sucesso: false, erro: 'Botão Serviço não encontrado' };
+                const btnCSS = document.querySelector('a[title="Serviços"]');
+                if (btnCSS) await clickElement(btnCSS, 'Serviços');
+                else {
+                    const erro = 'Serviços não encontrado';
+                    relatorio.push({ id: idValue, status: 'erro', mensagem: erro, dados: dados, erro: erro });
+                    atualizarStatusPopup();
+                    return { sucesso: false, erro: erro };
                 }
             } else {
-                await clickElement(btnServico, 'Botão Serviço');
+                await clickElement(btnServico, 'Serviços');
             }
             
-            // ============================================
-            // PASSO 7: ABA MEDIÇÃO
-            // ============================================
-            addLog('🔍 Passo 7: Abrindo Medição de Campo...', 'info');
-            const abaMedicao = await waitForElement('//a[@role="tab" and contains(text(), "Medição de Campo")]');
+            // ===== PASSO 7: ABA MEDIÇÃO =====
+            const abaMedicao = await waitForElement('//a[@role="tab" and contains(text(), "Medição de Campo")]', 4000);
             if (!abaMedicao) {
-                const todasAbas = document.querySelectorAll('a[role="tab"]');
-                let abaEncontrada = null;
-                for (const aba of todasAbas) {
+                const abas = document.querySelectorAll('a[role="tab"]');
+                let encontrada = null;
+                for (const aba of abas) {
                     if (aba.textContent.includes('Medição de Campo')) {
-                        abaEncontrada = aba;
+                        encontrada = aba;
                         break;
                     }
                 }
-                if (abaEncontrada) {
-                    await clickElement(abaEncontrada, 'Aba Medição (texto)');
-                } else {
-                    return { sucesso: false, erro: 'Aba Medição de Campo não encontrada' };
+                if (encontrada) await clickElement(encontrada, 'Aba Medição');
+                else {
+                    const erro = 'Aba não encontrada';
+                    relatorio.push({ id: idValue, status: 'erro', mensagem: erro, dados: dados, erro: erro });
+                    atualizarStatusPopup();
+                    return { sucesso: false, erro: erro };
                 }
             } else {
-                await clickElement(abaMedicao, 'Aba Medição de Campo');
+                await clickElement(abaMedicao, 'Aba Medição');
             }
             
-            // ============================================
-            // PASSO 8: INSERIR MEDIÇÃO
-            // ============================================
-            addLog('🔍 Passo 8: Inserindo medição...', 'info');
-            const btnInserir = await waitForElement('//button[contains(text(), "Inserir Medição de Campo")]');
+            // ===== PASSO 8: INSERIR MEDIÇÃO =====
+            const btnInserir = await waitForElement('//button[contains(text(), "Inserir Medição de Campo")]', 4000);
             if (!btnInserir) {
                 const botoes = document.querySelectorAll('button');
-                let btnEncontrado = null;
+                let encontrado = null;
                 for (const btn of botoes) {
                     if (btn.textContent.includes('Inserir Medição')) {
-                        btnEncontrado = btn;
+                        encontrado = btn;
                         break;
                     }
                 }
-                if (btnEncontrado) {
-                    await clickElement(btnEncontrado, 'Botão Inserir (texto)');
-                } else {
-                    return { sucesso: false, erro: 'Botão Inserir Medição não encontrado' };
+                if (encontrado) await clickElement(encontrado, 'Inserir');
+                else {
+                    const erro = 'Inserir não encontrado';
+                    relatorio.push({ id: idValue, status: 'erro', mensagem: erro, dados: dados, erro: erro });
+                    atualizarStatusPopup();
+                    return { sucesso: false, erro: erro };
                 }
             } else {
-                await clickElement(btnInserir, 'Botão Inserir Medição');
+                await clickElement(btnInserir, 'Inserir');
             }
             
-            await wait(1000);
+            await wait(500);
             
-            // ============================================
-            // PASSO 9: PREENCHER FORMULÁRIO
-            // ============================================
-            addLog('✏️ Passo 9: Preenchendo formulário...', 'info');
+            // ===== PASSO 9: PREENCHER FORMULÁRIO =====
+            const prancha = dados['PRANCHA'] || '';
+            const classe = dados['CLASSE'] || '';
+            const maraCode = dados['MARACODE'] || '';
+            const item = dados['ITEM'] || '';
+            const qtdServico = dados['QTD SERVICO EXECUTADO'] || '';
+            const pesquisaMaterial = dados['PESQUISA MATERIAL'] || '';
+            const qtdMaterial = dados['QTD MATERIAL'] || '';
+            const localObra = dados['LOCAL EXECUCAO OBRA'] || '';
             
-            const prancha = dados['PRANCHA'] || dados['Prancha'] || '';
-            const classe = dados['CLASSE'] || dados['Classe'] || '';
-            const maraCode = dados['MARACODE'] || dados['MaraCode'] || '';
-            const item = dados['ITEM'] || dados['Item'] || '';
-            const qtdServico = dados['QTD SERVICO EXECUTADO'] || dados['Qtd Servico Executado'] || '';
-            const pesquisaMaterial = dados['PESQUISA MATERIAL'] || dados['Pesquisa Material'] || '';
-            const qtdMaterial = dados['QTD MATERIAL'] || dados['Qtd Material'] || '';
-            const localObra = dados['LOCAL EXECUCAO OBRA'] || dados['Local Execucao Obra'] || '';
-            
-            const itemVazio = !item || item === '' || item === null || item === undefined;
+            const itemVazio = !item || item === '';
             
             if (itemVazio) {
-                addLog(`⚠️ Campo ITEM vazio! Ignorando campos de PESQUISA MATERIAL e QTD MATERIAL`, 'warning');
+                addLog(`⚠️ ITEM vazio, pulando materiais`, 'warning');
             }
             
-            // Prancha
-            const inputPrancha = await waitForElement('//input[@id="demPrancha"]');
-            await preencherCampo(inputPrancha, prancha, 'Prancha');
+            // Preenche campos
+            const inputPrancha = await waitForElement('//input[@id="demPrancha"]', 3000);
+            if (inputPrancha) await preencherCampoRapido(inputPrancha, prancha, 'Prancha');
             
-            // Classe
-            const selectClasse = await waitForElement('//select[@id="demClasse"]');
-            await preencherCampo(selectClasse, classe, 'Classe');
+            const selectClasse = await waitForElement('//select[@id="demClasse"]', 3000);
+            if (selectClasse) await preencherCampoRapido(selectClasse, classe, 'Classe');
             
-            // MaraCode com Enter
-            const inputMaraCode = await waitForElement('//input[@placeholder="Mara Code"]');
+            const inputMaraCode = await waitForElement('//input[@placeholder="Mara Code"]', 3000);
             if (inputMaraCode && maraCode) {
-                addLog(`✏️ Preenchendo MaraCode: ${maraCode}`, 'info');
-                
-                inputMaraCode.value = '';
-                inputMaraCode.focus();
-                await wait(300);
-                
-                const chars = String(maraCode).split('');
-                for (let i = 0; i < chars.length; i++) {
-                    inputMaraCode.value += chars[i];
-                    inputMaraCode.dispatchEvent(new Event('input', { bubbles: true }));
-                    await wait(50);
-                }
-                
-                inputMaraCode.dispatchEvent(new Event('change', { bubbles: true }));
-                await wait(300);
-                
-                addLog(`⌨️ Pressionando Enter para confirmar MaraCode: ${maraCode}`, 'info');
+                await preencherCampoRapido(inputMaraCode, maraCode, 'MaraCode');
                 await pressionarEnter(inputMaraCode, 'MaraCode');
-                
-                addLog(`✅ MaraCode "${maraCode}" preenchido e confirmado com Enter`, 'success');
-            } else {
-                addLog(`⏭️ MaraCode vazio, pulando...`, 'info');
             }
             
-            // Item
-            const selectItem = await waitForElement('//select[@id="maraCode"]');
-            await preencherCampo(selectItem, item, 'Item');
+            const selectItem = await waitForElement('//select[@id="maraCode"]', 3000);
+            if (selectItem) await preencherCampoRapido(selectItem, item, 'Item');
             
-            // Qtd Serviço
-            const inputQtdServico = await waitForElement('//input[@id="qtdServicoExecutado"]');
-            await preencherCampo(inputQtdServico, qtdServico, 'Qtd Serviço');
+            const inputQtd = await waitForElement('//input[@id="qtdServicoExecutado"]', 3000);
+            if (inputQtd) await preencherCampoRapido(inputQtd, qtdServico, 'Qtd Serviço');
             
-            // ============================================
-            // PESQUISA MATERIAL - COM ENTER
-            // ============================================
             if (!itemVazio && pesquisaMaterial) {
-                const inputPesquisa = await waitForElement('//input[@placeholder="Material"]');
+                const inputPesquisa = await waitForElement('//input[@placeholder="Material"]', 3000);
                 if (inputPesquisa) {
-                    addLog(`✏️ Preenchendo Pesquisa Material: ${pesquisaMaterial}`, 'info');
-                    
-                    inputPesquisa.value = '';
-                    inputPesquisa.focus();
-                    await wait(300);
-                    
-                    const chars = String(pesquisaMaterial).split('');
-                    for (let i = 0; i < chars.length; i++) {
-                        inputPesquisa.value += chars[i];
-                        inputPesquisa.dispatchEvent(new Event('input', { bubbles: true }));
-                        await wait(50);
-                    }
-                    
-                    inputPesquisa.dispatchEvent(new Event('change', { bubbles: true }));
-                    await wait(300);
-                    
-                    // PRESSIONA ENTER NA PESQUISA MATERIAL
-                    addLog(`⌨️ Pressionando Enter para pesquisar material: ${pesquisaMaterial}`, 'info');
+                    await preencherCampoRapido(inputPesquisa, pesquisaMaterial, 'Pesquisa Material');
                     await pressionarEnter(inputPesquisa, 'Pesquisa Material');
-                    
-                    addLog(`✅ Pesquisa Material "${pesquisaMaterial}" preenchida e confirmada com Enter`, 'success');
                 }
-            } else {
-                addLog(`⏭️ Pesquisa Material vazia ou ITEM vazio, pulando...`, 'info');
             }
             
-            // ============================================
-            // MATERIAL - IGNORADO (NÃO PREENCHE)
-            // ============================================
-            addLog(`⏭️ Campo MATERIAL ignorado (não será preenchido)`, 'info');
-            
-            // ============================================
-            // QTD MATERIAL (somente se ITEM não estiver vazio)
-            // ============================================
             if (!itemVazio && qtdMaterial) {
-                const inputQtdMaterial = await waitForElement('//input[@id="qtdMaterial"]');
-                await preencherCampo(inputQtdMaterial, qtdMaterial, 'Qtd Material');
-            } else {
-                addLog(`⏭️ Qtd Material vazio ou ITEM vazio, pulando...`, 'info');
+                const inputQtdMat = await waitForElement('//input[@id="qtdMaterial"]', 3000);
+                if (inputQtdMat) await preencherCampoRapido(inputQtdMat, qtdMaterial, 'Qtd Material');
             }
             
-            // Local Obra
-            const inputLocalObra = await waitForElement('//input[@id="localObra"]');
-            await preencherCampo(inputLocalObra, localObra, 'Local Obra');
+            const inputLocal = await waitForElement('//input[@id="localObra"]', 3000);
+            if (inputLocal) await preencherCampoRapido(inputLocal, localObra, 'Local Obra');
             
-            // ============================================
-            // PASSO 10: SALVAR MEDIÇÃO E FECHAR
-            // ============================================
+            // ===== PASSO 10: SALVAR E VERIFICAR =====
             if (!CONFIG.modoTeste) {
-                addLog('💾 Passo 10: Salvando medição...', 'info');
-                
-                let btnSalvar = null;
-                
-                // Procura botão Salvar
-                btnSalvar = document.querySelector('button.btn.btn-primary.mt-4.float-right');
-                if (!btnSalvar) {
-                    btnSalvar = document.querySelector('button[type="submit"].btn-primary.float-right');
-                }
+                let btnSalvar = document.querySelector('button.btn.btn-primary.mt-4.float-right');
+                if (!btnSalvar) btnSalvar = document.querySelector('button[type="submit"].btn-primary.float-right');
                 if (!btnSalvar) {
                     const botoes = document.querySelectorAll('button');
                     for (const btn of botoes) {
@@ -719,47 +668,52 @@
                         }
                     }
                 }
-                if (!btnSalvar) {
-                    try {
-                        const result = document.evaluate(
-                            '//button[@type="submit" and contains(text(), "Salvar Medição")]',
-                            document,
-                            null,
-                            XPathResult.FIRST_ORDERED_NODE_TYPE,
-                            null
-                        );
-                        btnSalvar = result.singleNodeValue;
-                    } catch (e) {}
-                }
                 
                 if (btnSalvar) {
                     btnSalvar.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    await wait(500);
-                    
-                    try {
-                        btnSalvar.click();
-                        addLog('✅ Botão Salvar Medição clicado com sucesso!', 'success');
-                    } catch (e) {
-                        const event = new MouseEvent('click', {
-                            view: window,
-                            bubbles: true,
-                            cancelable: true
-                        });
-                        btnSalvar.dispatchEvent(event);
-                        addLog('✅ Botão Salvar Medição clicado via evento!', 'success');
-                    }
-                    
-                    addLog('⏳ Aguardando processamento do salvamento...', 'info');
+                    await wait(200);
+                    btnSalvar.click();
+                    addLog('💾 Salvando...', 'info');
                     await wait(CONFIG.delayAposSalvar);
                     
-                    // ============================================
-                    // CLICA NO BOTÃO FECHAR
-                    // ============================================
-                    addLog('🔍 Procurando botão Fechar...', 'info');
+                    // ===== VERIFICA MENSAGEM DE RETORNO =====
+                    const resultado = verificarMensagemRetorno();
                     
-                    let btnFechar = null;
+                    if (resultado) {
+                        if (resultado.status === 'sucesso') {
+                            relatorio.push({
+                                id: idValue,
+                                status: 'sucesso',
+                                mensagem: resultado.mensagem,
+                                dados: dados
+                            });
+                            addLog(`✅ ID ${idValue} cadastrado com sucesso!`, 'success');
+                        } else {
+                            relatorio.push({
+                                id: idValue,
+                                status: 'erro',
+                                mensagem: resultado.mensagem,
+                                dados: dados,
+                                erro: resultado.mensagem
+                            });
+                            addLog(`❌ ID ${idValue} falhou: ${resultado.mensagem}`, 'error');
+                        }
+                    } else {
+                        // Se não encontrou mensagem, considera como sucesso (fallback)
+                        addLog(`⚠️ Nenhuma mensagem de retorno detectada para ID ${idValue}`, 'warning');
+                        relatorio.push({
+                            id: idValue,
+                            status: 'sucesso',
+                            mensagem: 'Cadastro realizado (sem confirmação)',
+                            dados: dados
+                        });
+                    }
                     
-                    btnFechar = document.querySelector('button.btn.btn-secondary.mt-4.float-left');
+                    // Atualiza status do popup
+                    atualizarStatusPopup();
+                    
+                    // ===== FECHAR =====
+                    let btnFechar = document.querySelector('button.btn.btn-secondary.mt-4.float-left');
                     if (!btnFechar) {
                         const botoes = document.querySelectorAll('button');
                         for (const btn of botoes) {
@@ -769,85 +723,47 @@
                             }
                         }
                     }
-                    if (!btnFechar) {
-                        try {
-                            const result = document.evaluate(
-                                '//button[contains(text(), "Fechar")]',
-                                document,
-                                null,
-                                XPathResult.FIRST_ORDERED_NODE_TYPE,
-                                null
-                            );
-                            btnFechar = result.singleNodeValue;
-                        } catch (e) {}
-                    }
                     
                     if (btnFechar) {
                         btnFechar.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        await wait(500);
-                        
-                        try {
-                            btnFechar.click();
-                            addLog('✅ Botão Fechar clicado com sucesso!', 'success');
-                        } catch (e) {
-                            const event = new MouseEvent('click', {
-                                view: window,
-                                bubbles: true,
-                                cancelable: true
-                            });
-                            btnFechar.dispatchEvent(event);
-                            addLog('✅ Botão Fechar clicado via evento!', 'success');
-                        }
-                        
+                        await wait(200);
+                        btnFechar.click();
                         await wait(CONFIG.delayAposFechar);
-                    } else {
-                        addLog('⚠️ Botão Fechar não encontrado! Continuando...', 'warning');
                     }
                     
                 } else {
-                    addLog('⚠️ Botão Salvar não encontrado! Tentando submit...', 'warning');
-                    
-                    const form = document.querySelector('form');
-                    if (form) {
-                        form.submit();
-                        addLog('📤 Formulário submetido via submit()', 'info');
-                        await wait(CONFIG.delayAposSalvar);
-                        
-                        // Tenta encontrar o Fechar após submit
-                        let btnFechar = document.querySelector('button.btn.btn-secondary.mt-4.float-left');
-                        if (!btnFechar) {
-                            const botoes = document.querySelectorAll('button');
-                            for (const btn of botoes) {
-                                if (btn.textContent.trim() === 'Fechar' || btn.textContent.includes('Fechar')) {
-                                    btnFechar = btn;
-                                    break;
-                                }
-                            }
-                        }
-                        
-                        if (btnFechar) {
-                            btnFechar.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            await wait(500);
-                            btnFechar.click();
-                            addLog('✅ Botão Fechar clicado após submit!', 'success');
-                            await wait(CONFIG.delayAposFechar);
-                        }
-                    } else {
-                        addLog('❌ Nenhum formulário encontrado para submit', 'error');
-                        return { sucesso: false, erro: 'Botão Salvar não encontrado' };
-                    }
+                    const erro = 'Botão Salvar não encontrado';
+                    relatorio.push({ id: idValue, status: 'erro', mensagem: erro, dados: dados, erro: erro });
+                    atualizarStatusPopup();
+                    return { sucesso: false, erro: erro };
                 }
             } else {
-                addLog('🧪 MODO TESTE: Cadastro simulado!', 'success');
-                await wait(2000);
+                // Modo teste
+                addLog(`🧪 MODO TESTE: ID ${idValue} simulado com sucesso`, 'success');
+                relatorio.push({
+                    id: idValue,
+                    status: 'sucesso',
+                    mensagem: 'TESTE - Cadastro simulado',
+                    dados: dados
+                });
+                atualizarStatusPopup();
+                await wait(1000);
             }
             
-            addLog(`✅ Cadastro do ID ${idValue} concluído!`, 'success');
             return { sucesso: true };
             
         } catch (error) {
-            addLog(`❌ Erro no cadastro do ID ${idValue}: ${error.message}`, 'error');
-            return { sucesso: false, erro: error.message };
+            const erroMsg = error.message || 'Erro desconhecido';
+            addLog(`❌ ID ${idValue}: ${erroMsg}`, 'error');
+            relatorio.push({
+                id: idValue,
+                status: 'erro',
+                mensagem: erroMsg,
+                dados: dados,
+                erro: erroMsg
+            });
+            atualizarStatusPopup();
+            return { sucesso: false, erro: erroMsg };
         }
     }
     
@@ -864,6 +780,8 @@
         estaExecutando = true;
         podeParar = false;
         cadastroAtual = 0;
+        relatorio = [];
+        contadores = { sucessos: 0, erros: 0, pulados: 0 };
         
         addLog(`🚀 Iniciando ${dadosParaCadastrar.length} cadastros`, 'info');
         addLog(`📋 Modo: ${CONFIG.modoTeste ? 'TESTE' : 'PRODUÇÃO'}`, 'info');
@@ -871,43 +789,56 @@
         const logContainer = document.getElementById('auto-log');
         if (logContainer) logContainer.innerHTML = '';
         
-        let sucessos = 0, falhas = 0, pulados = 0;
-        
         for (let i = 0; i < dadosParaCadastrar.length; i++) {
             if (podeParar) {
-                addLog('⏹️ Automação interrompida', 'warning');
+                addLog('⏹️ Interrompido', 'warning');
                 break;
             }
             
             cadastroAtual = i + 1;
             const dados = dadosParaCadastrar[i];
-            
             const idExibicao = dados['ID'] || dados['id'] || dados['Id'] || i + 1;
-            addLog(`📌 Cadastro ${cadastroAtual}/${dadosParaCadastrar.length} - ID: ${idExibicao}`, 'info');
+            
+            addLog(`📌 ${cadastroAtual}/${dadosParaCadastrar.length} - ID: ${idExibicao}`, 'info');
             atualizarProgresso(cadastroAtual, dadosParaCadastrar.length);
             
             try {
-                const resultado = await executarCadastro(dados, i);
-                if (resultado.sucesso) sucessos++;
-                else if (resultado.pulado) pulados++;
-                else falhas++;
+                await executarCadastro(dados, i);
             } catch (error) {
-                falhas++;
                 addLog(`❌ Erro: ${error.message}`, 'error');
+                relatorio.push({
+                    id: idExibicao,
+                    status: 'erro',
+                    mensagem: error.message,
+                    dados: dados,
+                    erro: error.message
+                });
+                atualizarStatusPopup();
             }
             
             if (i < dadosParaCadastrar.length - 1 && !podeParar) {
-                addLog(`⏳ Aguardando ${CONFIG.delayEntreCadastros}ms antes do próximo ID...`, 'info');
                 await wait(CONFIG.delayEntreCadastros);
             }
         }
         
         estaExecutando = false;
-        const mensagem = `✅ Finalizado! ${sucessos} sucessos, ${falhas} falhas, ${pulados} pulados`;
-        addLog(mensagem, 'success');
         
+        // Calcula estatísticas finais
+        const sucessos = relatorio.filter(r => r.status === 'sucesso').length;
+        const erros = relatorio.filter(r => r.status === 'erro').length;
+        const pulados = relatorio.filter(r => r.status === 'pulado').length;
+        
+        const mensagem = `✅ Finalizado! ${sucessos} sucessos, ${erros} erros, ${pulados} pulados`;
+        addLog(mensagem, 'success');
+        addLog(`📊 Relatório gerado com ${relatorio.length} registros`, 'info');
+        
+        // Atualiza botões
         document.getElementById('popup-btn-iniciar').disabled = false;
         document.getElementById('popup-btn-parar').disabled = true;
+        document.getElementById('popup-btn-relatorio').disabled = false;
+        
+        // Atualiza status final
+        atualizarStatusPopup();
     }
     
     function atualizarProgresso(atual, total) {
@@ -996,12 +927,12 @@
             transform: translate(-50%, -50%);
             z-index: 10000;
             background: white;
-            padding: 25px;
+            padding: 20px;
             border-radius: 12px;
             box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-            min-width: 500px;
-            max-width: 650px;
-            max-height: 80vh;
+            min-width: 480px;
+            max-width: 600px;
+            max-height: 85vh;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             border: 1px solid #e0e0e0;
             display: none;
@@ -1010,128 +941,105 @@
         `;
         
         popup.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 2px solid #e9ecef;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid #e9ecef;">
                 <div style="display: flex; align-items: center; gap: 10px;">
-                    <span style="font-size: 24px;">🔧</span>
-                    <h3 style="margin: 0; color: #212529; font-size: 18px;">Automação Serviços/Materiais</h3>
+                    <span style="font-size: 22px;">⚡</span>
+                    <h3 style="margin: 0; color: #212529; font-size: 16px;">Cadastramento de  Serviços e Materiais</h3>
                 </div>
                 <button id="btn-fechar-popup" style="
                     background: none;
                     border: none;
-                    font-size: 24px;
+                    font-size: 22px;
                     cursor: pointer;
                     color: #6c757d;
-                    padding: 0 8px;
+                    padding: 0 6px;
                     transition: all 0.3s ease;
                     line-height: 1;
                 " title="Fechar">✕</button>
             </div>
             
-            <div style="margin-bottom: 12px; font-size: 13px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px; padding: 8px 12px; background: #f8f9fa; border-radius: 6px; border: 1px solid #e9ecef;">
                 <span class="status-indicator" id="popup-status-indicator" style="
                     display: inline-block;
-                    width: 10px;
-                    height: 10px;
+                    width: 8px;
+                    height: 8px;
                     border-radius: 50%;
                     background: #28a745;
-                    margin-right: 6px;
                 "></span>
-                <span id="popup-status-text" style="color: #495057;">Pronto para importar</span>
+                <span id="popup-status-text" style="color: #495057; font-weight: 500;">Pronto</span>
+                <span style="margin-left: auto; color: #6c757d; font-size: 11px;" id="popup-tempo-estimado"></span>
             </div>
             
             <div id="popup-upload-area" style="
                 border: 2px dashed #dee2e6;
-                border-radius: 8px;
-                padding: 25px;
+                border-radius: 6px;
+                padding: 15px;
                 text-align: center;
                 cursor: pointer;
                 transition: all 0.3s ease;
                 background: #f8f9fa;
-                margin-bottom: 12px;
+                margin-bottom: 10px;
             ">
-                <div style="font-size: 36px; margin-bottom: 6px;">📊</div>
-                <div style="font-size: 14px; color: #495057;">
-                    <strong>Clique para selecionar</strong> ou arraste seu Excel
+                <div style="font-size: 28px; margin-bottom: 4px;">📊</div>
+                <div style="font-size: 13px; color: #495057;">
+                    <strong>Clique</strong> ou arraste seu Excel
                 </div>
-                <div style="font-size: 12px; color: #6c757d; margin-top: 4px;">
-                    Suporta: .xlsx, .xls, .csv
-                </div>
+                <div style="font-size: 11px; color: #6c757d;">.xlsx, .xls, .csv</div>
                 <input type="file" id="popup-file-input" accept=".xlsx,.xls,.csv" style="display:none">
             </div>
             
             <div id="popup-file-info" style="
                 background: #f8fff9;
-                padding: 10px 15px;
-                border-radius: 6px;
+                padding: 6px 12px;
+                border-radius: 4px;
                 border-left: 3px solid #28a745;
                 display: none;
-                margin-bottom: 10px;
+                margin-bottom: 8px;
+                font-size: 12px;
             ">
-                <div style="font-weight: 500; color: #212529;" id="popup-file-name">arquivo.xlsx</div>
-                <div style="color: #6c757d; font-size: 12px;" id="popup-file-size">0 KB</div>
-                <div style="margin-top: 4px; font-size: 12px; color: #6c757d;" id="popup-file-rows">0 linhas</div>
+                <span id="popup-file-name" style="font-weight: 500;">arquivo.xlsx</span>
+                <span id="popup-file-size" style="color: #6c757d; margin-left: 8px;">0 KB</span>
+                <span id="popup-file-rows" style="color: #28a745; margin-left: 8px;">0 linhas</span>
             </div>
             
             <div id="popup-preview" style="
-                max-height: 120px;
-                overflow-y: auto;
+                max-height: 100px;
+                overflow: auto;
                 background: white;
-                border-radius: 6px;
+                border-radius: 4px;
                 border: 1px solid #e9ecef;
-                padding: 10px;
+                padding: 6px;
                 display: none;
-                margin-bottom: 10px;
+                margin-bottom: 8px;
+                font-size: 11px;
             ">
-                <div style="font-size: 11px; font-weight: 500; margin-bottom: 6px; color: #495057;">
-                    📋 Pré-visualização (primeiras 5 linhas)
-                </div>
                 <div id="popup-preview-content"></div>
             </div>
             
             <div id="popup-stats" style="
                 display: none;
-                gap: 10px;
-                padding: 10px;
+                gap: 8px;
+                padding: 6px 10px;
                 background: white;
-                border-radius: 6px;
+                border-radius: 4px;
                 border: 1px solid #e9ecef;
-                margin-bottom: 10px;
+                margin-bottom: 8px;
             ">
-                <div style="display: flex; gap: 10px;">
-                    <div style="flex: 1; text-align: center;">
-                        <div style="font-size: 18px; font-weight: 600; color: #28a745;" id="popup-total-rows">0</div>
-                        <div style="font-size: 11px; color: #6c757d;">Registros</div>
+                <div style="display: flex; gap: 8px; font-size: 12px;">
+                    <div style="flex:1;text-align:center;">
+                        <span style="font-weight:600;color:#28a745;" id="popup-total-rows">0</span>
+                        <span style="color:#6c757d;"> registros</span>
                     </div>
-                    <div style="flex: 1; text-align: center;">
-                        <div style="font-size: 18px; font-weight: 600; color: #28a745;" id="popup-total-cols">0</div>
-                        <div style="font-size: 11px; color: #6c757d;">Campos</div>
-                    </div>
-                    <div style="flex: 1; text-align: center;">
-                        <div style="font-size: 18px; font-weight: 600; color: #17a2b8;" id="popup-status-count">⏸️</div>
-                        <div style="font-size: 11px; color: #6c757d;">Status</div>
+                    <div style="flex:1;text-align:center;">
+                        <span style="font-weight:600;color:#28a745;" id="popup-total-cols">0</span>
+                        <span style="color:#6c757d;"> campos</span>
                     </div>
                 </div>
             </div>
             
-            <div style="margin-bottom: 10px;">
-                <div style="
-                    height: 25px;
-                    background-color: #e9ecef;
-                    border-radius: 4px;
-                    overflow: hidden;
-                ">
-                    <div id="auto-progresso" style="
-                        width: 0%;
-                        height: 100%;
-                        background-color: #28a745;
-                        transition: width 0.3s;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        color: white;
-                        font-size: 12px;
-                        font-weight: bold;
-                    ">0%</div>
+            <div style="margin-bottom: 8px;">
+                <div style="height:20px;background:#e9ecef;border-radius:4px;overflow:hidden;">
+                    <div id="auto-progresso" style="width:0%;height:100%;background:#28a745;transition:width 0.3s;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:bold;">0%</div>
                 </div>
             </div>
             
@@ -1141,93 +1049,33 @@
                 font-size: 11px;
                 background: #f8f9fa;
                 border-radius: 4px;
-                padding: 8px;
-                margin-bottom: 10px;
+                padding: 6px;
+                margin-bottom: 8px;
                 min-height: 80px;
                 max-height: 150px;
                 font-family: monospace;
                 border: 1px solid #e9ecef;
             ">
-                <div style="color: #6c757d;">Aguardando início...</div>
+                <div style="color:#6c757d;">Aguardando início...</div>
             </div>
             
-            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;">
-                <button id="popup-btn-iniciar" style="
-                    flex: 1;
-                    padding: 8px 12px;
-                    background: #28a745;
-                    color: white;
-                    border: none;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 13px;
-                    transition: all 0.3s ease;
-                " disabled>
-                    ▶️ Iniciar
-                </button>
-                <button id="popup-btn-parar" style="
-                    flex: 1;
-                    padding: 8px 12px;
-                    background: #dc3545;
-                    color: white;
-                    border: none;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 13px;
-                    transition: all 0.3s ease;
-                " disabled>
-                    ⏹️ Parar
-                </button>
-                <button id="popup-btn-limpar" style="
-                    flex: 0 0 auto;
-                    padding: 8px 12px;
-                    background: #6c757d;
-                    color: white;
-                    border: none;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 13px;
-                    transition: all 0.3s ease;
-                ">
-                    🗑️ Limpar
-                </button>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px;">
+                <button id="popup-btn-iniciar" style="flex:1;padding:6px 10px;background:#28a745;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;transition:all 0.3s;" disabled>▶️ Iniciar</button>
+                <button id="popup-btn-parar" style="flex:1;padding:6px 10px;background:#dc3545;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;transition:all 0.3s;" disabled>⏹️ Parar</button>
+                <button id="popup-btn-limpar" style="flex:0 0 auto;padding:6px 10px;background:#6c757d;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;" title="Limpar dados">🗑️</button>
             </div>
             
-            <div style="display: flex; gap: 12px; font-size: 12px; color: #6c757d; margin-bottom: 8px; align-items: center;">
-                <span id="popup-info-cadastros">0 cadastros carregados</span>
-                <label style="margin-left: auto; display: flex; align-items: center; gap: 4px; cursor: pointer;">
+            <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+                <button id="popup-btn-relatorio" style="flex:1;padding:6px 10px;background:#17a2b8;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;transition:all 0.3s;" disabled>📊 Relatório</button>
+                <button id="popup-btn-exportar-log" style="flex:1;padding:6px 10px;background:#6c757d;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;transition:all 0.3s;">📥 Exportar Log</button>
+            </div>
+            
+            <div style="display:flex;gap:8px;font-size:11px;color:#6c757d;align-items:center;margin-bottom:4px;">
+                <span id="popup-info-cadastros">0 carregados</span>
+                <label style="margin-left:auto;display:flex;align-items:center;gap:4px;cursor:pointer;">
                     <input type="checkbox" id="popup-modo-teste" ${CONFIG.modoTeste ? 'checked' : ''}>
                     Modo Teste
                 </label>
-            </div>
-            
-            <div style="display: flex; gap: 8px;">
-                <button id="popup-btn-configurar" style="
-                    flex: 1;
-                    padding: 6px;
-                    background: #e9ecef;
-                    border: none;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 11px;
-                    color: #495057;
-                    transition: all 0.3s ease;
-                ">
-                    ⚙️ Configurar XPATHs
-                </button>
-                <button id="popup-btn-exportar" style="
-                    flex: 1;
-                    padding: 6px;
-                    background: #e9ecef;
-                    border: none;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 11px;
-                    color: #495057;
-                    transition: all 0.3s ease;
-                ">
-                    📥 Exportar Log
-                </button>
             </div>
         `;
         
@@ -1241,19 +1089,16 @@
                     from { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
                     to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
                 }
-                .log-entry { padding: 2px 4px; border-bottom: 1px solid #f1f3f5; font-size: 11px; }
+                .log-entry { padding: 2px 4px; border-bottom: 1px solid #f1f3f5; font-size: 10px; }
                 .log-success { color: #28a745; }
                 .log-error { color: #dc3545; }
                 .log-warning { color: #ffc107; }
                 .log-info { color: #17a2b8; }
-                #popup-upload-area:hover {
-                    border-color: #28a745;
-                    background: #f0fff4;
-                }
-                #popup-upload-area.dragover {
-                    border-color: #28a745;
-                    background: #f0fff4;
-                }
+                #popup-upload-area:hover { border-color: #28a745; background: #f0fff4; }
+                #popup-upload-area.dragover { border-color: #28a745; background: #f0fff4; }
+                #popup-preview::-webkit-scrollbar, #auto-log::-webkit-scrollbar { width: 4px; }
+                #popup-preview::-webkit-scrollbar-track, #auto-log::-webkit-scrollbar-track { background: #f1f1f1; border-radius:2px; }
+                #popup-preview::-webkit-scrollbar-thumb, #auto-log::-webkit-scrollbar-thumb { background: #888; border-radius:2px; }
             `;
             document.head.appendChild(style);
         }
@@ -1327,6 +1172,7 @@
                 executarTodosCadastros();
                 document.getElementById('popup-btn-iniciar').disabled = true;
                 document.getElementById('popup-btn-parar').disabled = false;
+                document.getElementById('popup-btn-relatorio').disabled = true;
             } else {
                 addLog('⚠️ Importe um arquivo primeiro!', 'error');
             }
@@ -1336,59 +1182,68 @@
             podeParar = true;
             document.getElementById('popup-btn-parar').disabled = true;
             document.getElementById('popup-btn-iniciar').disabled = false;
-            addLog('⏹️ Parando automação...', 'warning');
+            addLog('⏹️ Parando...', 'warning');
         });
         
         document.getElementById('popup-btn-limpar').addEventListener('click', () => {
             dadosParaCadastrar = [];
             cadastroAtual = 0;
+            relatorio = [];
+            contadores = { sucessos: 0, erros: 0, pulados: 0 };
             atualizarProgresso(0, 1);
-            document.getElementById('popup-info-cadastros').textContent = '0 cadastros carregados';
+            document.getElementById('popup-info-cadastros').textContent = '0 carregados';
             document.getElementById('popup-status-text').textContent = 'Pronto';
-            document.getElementById('auto-log').innerHTML = '<div style="color: #6c757d;">Dados limpos</div>';
+            document.getElementById('popup-status-text').style.color = '#495057';
+            document.getElementById('auto-log').innerHTML = '<div style="color:#6c757d;">Dados limpos</div>';
             document.getElementById('popup-file-info').style.display = 'none';
             document.getElementById('popup-preview').style.display = 'none';
             document.getElementById('popup-stats').style.display = 'none';
             document.getElementById('popup-btn-iniciar').disabled = true;
+            document.getElementById('popup-btn-relatorio').disabled = true;
             addLog('🗑️ Dados limpos!', 'info');
             chrome.storage.local.remove('dadosUltimos');
+        });
+        
+        document.getElementById('popup-btn-relatorio').addEventListener('click', () => {
+            baixarRelatorio();
+        });
+        
+        document.getElementById('popup-btn-exportar-log').addEventListener('click', () => {
+            const logText = log.map(entry => 
+                `[${entry.timestamp}] ${entry.mensagem}`
+            ).join('\n');
+            
+            let textoCompleto = logText;
+            if (relatorio.length > 0) {
+                const sucessos = relatorio.filter(r => r.status === 'sucesso').length;
+                const erros = relatorio.filter(r => r.status === 'erro').length;
+                const pulados = relatorio.filter(r => r.status === 'pulado').length;
+                
+                textoCompleto += '\n\n========================================\n';
+                textoCompleto += 'RESUMO DO RELATÓRIO:\n';
+                textoCompleto += '========================================\n';
+                textoCompleto += `✅ Sucessos: ${sucessos}\n`;
+                textoCompleto += `❌ Erros: ${erros}\n`;
+                textoCompleto += `⏭️ Pulados: ${pulados}\n`;
+                textoCompleto += `📊 Total: ${relatorio.length}\n`;
+            }
+            
+            const blob = new Blob([textoCompleto], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `log_completo_${new Date().toISOString().slice(0,10)}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            addLog('📥 Log exportado!', 'success');
         });
         
         document.getElementById('popup-modo-teste').addEventListener('change', function() {
             CONFIG.modoTeste = this.checked;
             addLog(`🧪 Modo teste ${this.checked ? 'ativado' : 'desativado'}`, 'info');
             chrome.storage.local.set({ modoTeste: this.checked });
-        });
-        
-        document.getElementById('popup-btn-configurar').addEventListener('click', () => {
-            const configText = prompt(
-                'Cole a configuração dos XPATHs (JSON):',
-                JSON.stringify(CONFIG.xpaths, null, 2)
-            );
-            if (configText) {
-                try {
-                    const newXpaths = JSON.parse(configText);
-                    Object.assign(CONFIG.xpaths, newXpaths);
-                    addLog('✅ Configurações atualizadas!', 'success');
-                    chrome.storage.local.set({ xpathsPersonalizados: CONFIG.xpaths });
-                } catch (e) {
-                    addLog('❌ Erro ao parsear JSON: ' + e.message, 'error');
-                }
-            }
-        });
-        
-        document.getElementById('popup-btn-exportar').addEventListener('click', () => {
-            const logText = log.map(entry => 
-                `[${entry.timestamp}] ${entry.mensagem}`
-            ).join('\n');
-            const blob = new Blob([logText], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `log-automacao-${new Date().toISOString().slice(0,10)}.txt`;
-            a.click();
-            URL.revokeObjectURL(url);
-            addLog('📥 Log exportado!', 'success');
         });
     }
     
@@ -1398,28 +1253,16 @@
             criarPopup();
             setTimeout(() => {
                 const newPopup = document.getElementById('auto-popup');
-                if (newPopup) {
-                    newPopup.style.display = 'flex';
-                    popupAberto = true;
-                }
+                if (newPopup) newPopup.style.display = 'flex';
             }, 100);
         } else {
-            if (popup.style.display === 'none' || popup.style.display === '') {
-                popup.style.display = 'flex';
-                popupAberto = true;
-            } else {
-                popup.style.display = 'none';
-                popupAberto = false;
-            }
+            popup.style.display = popup.style.display === 'none' ? 'flex' : 'none';
         }
     }
     
     function fecharPopup() {
         const popup = document.getElementById('auto-popup');
-        if (popup) {
-            popup.style.display = 'none';
-            popupAberto = false;
-        }
+        if (popup) popup.style.display = 'none';
     }
     
     function setStatusPopup(texto, tipo = 'ready') {
@@ -1434,21 +1277,24 @@
     
     function processarDadosPopup(data) {
         if (!data || data.length === 0) {
-            setStatusPopup('⚠️ Nenhum dado encontrado', 'error');
+            setStatusPopup('⚠️ Nenhum dado', 'error');
             return;
         }
         
         dadosParaCadastrar = data;
+        relatorio = [];
+        contadores = { sucessos: 0, erros: 0, pulados: 0 };
         
         document.getElementById('popup-total-rows').textContent = dadosParaCadastrar.length;
         document.getElementById('popup-total-cols').textContent = Object.keys(dadosParaCadastrar[0] || {}).length;
-        document.getElementById('popup-status-count').textContent = '✅';
         document.getElementById('popup-stats').style.display = 'flex';
-        document.getElementById('popup-info-cadastros').textContent = `${dadosParaCadastrar.length} cadastros carregados`;
+        document.getElementById('popup-info-cadastros').textContent = `${dadosParaCadastrar.length} carregados`;
         document.getElementById('popup-btn-iniciar').disabled = false;
+        document.getElementById('popup-btn-relatorio').disabled = true;
+        document.getElementById('popup-status-text').textContent = `✅ ${dadosParaCadastrar.length} registros carregados`;
+        document.getElementById('popup-status-text').style.color = '#28a745';
         
         showPreviewPopup(dadosParaCadastrar);
-        setStatusPopup(`✅ ${dadosParaCadastrar.length} registros carregados`, 'ready');
         
         chrome.storage.local.set({ dadosUltimos: dadosParaCadastrar });
         addLog(`📊 ${dadosParaCadastrar.length} registros carregados!`, 'success');
@@ -1463,18 +1309,18 @@
         document.getElementById('popup-preview').style.display = 'block';
         const headers = Object.keys(data[0]);
         
-        let html = '<table style="width:100%;font-size:11px;border-collapse:collapse;">';
+        let html = '<table style="width:100%;font-size:10px;border-collapse:collapse;">';
         html += '<thead><tr>';
         headers.forEach(h => {
-            html += `<th style="background:#f8f9fa;padding:4px 6px;text-align:left;border-bottom:2px solid #dee2e6;">${h}</th>`;
+            html += `<th style="background:#f8f9fa;padding:2px 4px;text-align:left;border-bottom:1px solid #dee2e6;">${h}</th>`;
         });
         html += '</tr></thead><tbody>';
         
-        const maxRows = Math.min(5, data.length);
+        const maxRows = Math.min(3, data.length);
         for (let i = 0; i < maxRows; i++) {
             html += '<tr>';
             headers.forEach(h => {
-                html += `<td style="padding:3px 6px;border-bottom:1px solid #e9ecef;">${data[i][h] || ''}</td>`;
+                html += `<td style="padding:2px 4px;border-bottom:1px solid #e9ecef;">${data[i][h] || ''}</td>`;
             });
             html += '</tr>';
         }
@@ -1510,7 +1356,7 @@
         });
         observer.observe(document.body, { childList: true, subtree: true });
         
-        console.log('🔧 Automação de Serviços/Materiais inicializada');
+        console.log('⚡ Automação com validação e relatório inicializada!');
     }
     
     // ===== ESCUTA MENSAGENS =====
