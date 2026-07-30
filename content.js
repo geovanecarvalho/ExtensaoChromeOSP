@@ -9,19 +9,6 @@
     
     // ===== CONFIGURAÇÕES =====
     const CONFIG = {
-        mapeamento: {
-            'ID': 'id',
-            'PRANCHA': 'prancha',
-            'CLASSE': 'classe',
-            'MARACODE': 'maraCode',
-            'ITEM': 'item',
-            'QTD SERVICO EXECUTADO': 'qtdServico',
-            'PESQUISA MATERIAL': 'pesquisaMaterial',
-            'MATERIAL': 'material',
-            'QTD MATERIAL': 'qtdMaterial',
-            'LOCAL EXECUCAO OBRA': 'localObra'
-        },
-        
         xpaths: {
             menuCollapse: '//span[@id="ott-sidebar-collapse"]',
             linkListaRequisicoes: '//a[@routerlink="/requisicoes-eps"]',
@@ -31,24 +18,26 @@
             btnServico: '//a[contains(@title, "Serviços")]',
             abaMedicaoCampo: '//a[@role="tab" and contains(text(), "Medição de Campo")]',
             btnInserirMedicao: '//button[contains(text(), "Inserir Medição de Campo")]',
-            inputPrancha: '//input[@id="demPrancha"]',
-            selectClasse: '//select[@id="demClasse"]',
+            inputPrancha: '//*[@id="demPrancha"]',
+            selectClasse: '//*[@id="demClasse"]',
             inputMaraCode: '//input[@placeholder="Mara Code"]',
-            selectItem: '//select[@id="maraCode"]',
-            inputQtdServico: '//input[@id="qtdServicoExecutado"]',
+            selectItem: '//*[@id="maraCode"]',
+            inputQtdServico: '//*[@id="qtdServicoExecutado"]',
             inputPesquisaMaterial: '//input[@placeholder="Material"]',
-            inputQtdMaterial: '//input[@id="qtdMaterial"]',
-            inputLocalObra: '//input[@id="localObra"]'
+            selectMaterial: '//*[@id="matCode"]',
+            inputQtdMaterial: '//*[@id="qtdMaterial"]',
+            inputLocalObra: '//*[@id="localObra"]'
         },
         
-        delayEntreCadastros: 1500,
+        delayEntreCadastros: 3000,
         delayPreenchimento: 200,
         delayAposBusca: 1500,
         delayAposClick: 500,
         delayAposNavegacao: 1500,
         delayAposSalvar: 3000,
-        delayAposEnter: 300,
+        delayAposEnter: 800,
         delayAposFechar: 500,
+        delayExpansaoFormulario: 3000,
         modoTeste: false
     };
     
@@ -67,7 +56,7 @@
         return new Promise(resolve => setTimeout(resolve, ms));
     }
     
-    function waitForElement(selector, timeout = 8000) {
+    function waitForElement(selector, timeout = 10000) {
         return new Promise((resolve) => {
             const startTime = Date.now();
             
@@ -171,9 +160,33 @@
         }
     }
     
-    async function preencherCampoRapido(elemento, valor, descricao = '') {
-        if (!elemento) return false;
-        if (valor === undefined || valor === null || valor === '') return true;
+    function converterNumero(valor) {
+        if (valor === undefined || valor === null || valor === '') {
+            return '';
+        }
+        let numeroStr = String(valor).trim().replace(/\s/g, '');
+        if (numeroStr.includes('.') && numeroStr.includes(',')) {
+            numeroStr = numeroStr.replace(/\./g, '');
+            numeroStr = numeroStr.replace(',', '.');
+        } else if (numeroStr.includes(',')) {
+            numeroStr = numeroStr.replace(',', '.');
+        }
+        const numero = parseFloat(numeroStr);
+        if (!isNaN(numero) && numeroStr !== '') {
+            return numero.toString();
+        }
+        return valor;
+    }
+    
+    async function preencherCampo(elemento, valor, descricao = '') {
+        if (!elemento) {
+            addLog(`⚠️ Campo não encontrado: ${descricao}`, 'warning');
+            return false;
+        }
+        if (valor === undefined || valor === null || valor === '') {
+            addLog(`⏭️ Campo vazio: ${descricao}`, 'info');
+            return true;
+        }
         try {
             elemento.scrollIntoView({ behavior: 'smooth', block: 'center' });
             await wait(100);
@@ -195,27 +208,34 @@
                     newOption.text = valorStr;
                     elemento.appendChild(newOption);
                     elemento.value = valorStr;
+                    encontrado = true;
                 }
-                const event = new Event('change', { bubbles: true });
-                elemento.dispatchEvent(event);
-                return true;
+                if (encontrado) {
+                    const event = new Event('change', { bubbles: true });
+                    elemento.dispatchEvent(event);
+                    addLog(`✅ Preencheu select: ${descricao} = ${valor}`, 'success');
+                    return true;
+                }
+                return false;
             } else if (elemento.tagName === 'INPUT' || elemento.tagName === 'TEXTAREA') {
+                let valorFinal = valor;
+                if (descricao.includes('Qtd') || descricao.includes('Quantidade')) {
+                    valorFinal = converterNumero(valor);
+                }
+                
                 elemento.value = '';
                 elemento.focus();
                 await wait(50);
-                
-                elemento.value = String(valor);
+                elemento.value = String(valorFinal);
                 const event = new Event('input', { bubbles: true });
                 elemento.dispatchEvent(event);
-                
                 elemento.blur();
                 await wait(50);
-                
                 ['change', 'blur'].forEach(eventType => {
                     const event = new Event(eventType, { bubbles: true });
                     elemento.dispatchEvent(event);
                 });
-                
+                addLog(`✅ Preencheu campo: ${descricao} = ${valorFinal}`, 'success');
                 return true;
             }
             return false;
@@ -225,10 +245,184 @@
         }
     }
     
+    async function preencherQtdServico(elemento, valor, descricao = '') {
+        if (!elemento) {
+            addLog(`⚠️ Campo não encontrado: ${descricao}`, 'warning');
+            return false;
+        }
+        if (valor === undefined || valor === null || valor === '') {
+            addLog(`⏭️ ${descricao} vazio, pulando...`, 'info');
+            return true;
+        }
+        
+        let valorFinal = converterNumero(valor);
+        addLog(`🔢 Tentando preencher ${descricao} com valor: "${valorFinal}" (original: "${valor}")`, 'info');
+        
+        try {
+            elemento.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            await wait(200);
+            
+            elemento.click();
+            await wait(100);
+            elemento.focus();
+            await wait(100);
+            elemento.value = '';
+            await wait(50);
+            elemento.value = String(valorFinal);
+            elemento.dispatchEvent(new Event('input', { bubbles: true }));
+            elemento.dispatchEvent(new Event('change', { bubbles: true }));
+            elemento.blur();
+            await wait(100);
+            
+            if (elemento.value === String(valorFinal) || elemento.value.replace(',', '.') === String(valorFinal)) {
+                addLog(`✅ ${descricao} preenchido: ${elemento.value}`, 'success');
+                return true;
+            }
+            
+            elemento.value = String(valorFinal);
+            elemento.dispatchEvent(new Event('input', { bubbles: true }));
+            elemento.dispatchEvent(new Event('change', { bubbles: true }));
+            await wait(100);
+            
+            if (elemento.value === String(valorFinal) || elemento.value.replace(',', '.') === String(valorFinal)) {
+                addLog(`✅ ${descricao} preenchido (estratégia 2): ${elemento.value}`, 'success');
+                return true;
+            }
+            
+            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype, 'value'
+            ).set;
+            nativeInputValueSetter.call(elemento, String(valorFinal));
+            elemento.dispatchEvent(new Event('input', { bubbles: true }));
+            elemento.dispatchEvent(new Event('change', { bubbles: true }));
+            await wait(100);
+            
+            if (elemento.value === String(valorFinal) || elemento.value.replace(',', '.') === String(valorFinal)) {
+                addLog(`✅ ${descricao} preenchido (estratégia 3): ${elemento.value}`, 'success');
+                return true;
+            }
+            
+            addLog(`⚠️ ${descricao} NÃO preenchido. Valor atual: "${elemento.value}"`, 'warning');
+            return false;
+        } catch (e) {
+            addLog(`❌ Erro ao preencher ${descricao}: ${e.message}`, 'error');
+            return false;
+        }
+    }
+    
+    // ===== FUNÇÃO ESPECÍFICA PARA ENCONTRAR LOCAL OBRA =====
+    async function encontrarLocalObra() {
+        addLog('🔍 Procurando campo Local Execução Obra...', 'info');
+        
+        // Estratégia 1: Por ID
+        let elemento = document.querySelector('#localObra');
+        if (elemento) {
+            const isVisible = elemento.offsetParent !== null && elemento.offsetWidth > 0;
+            if (isVisible) {
+                addLog('✅ Local Obra encontrado por ID (visível)', 'success');
+                return elemento;
+            } else {
+                addLog('⚠️ Local Obra encontrado por ID mas NÃO visível', 'warning');
+            }
+        }
+        
+        // Estratégia 2: Por XPATH
+        try {
+            const result = document.evaluate(
+                '//input[@id="localObra"]',
+                document,
+                null,
+                XPathResult.FIRST_ORDERED_NODE_TYPE,
+                null
+            );
+            elemento = result.singleNodeValue;
+            if (elemento) {
+                const isVisible = elemento.offsetParent !== null && elemento.offsetWidth > 0;
+                if (isVisible) {
+                    addLog('✅ Local Obra encontrado por XPATH (visível)', 'success');
+                    return elemento;
+                }
+            }
+        } catch (e) {}
+        
+        // Estratégia 3: Por placeholder
+        const inputs = document.querySelectorAll('input[placeholder="Local Obra"]');
+        for (const input of inputs) {
+            const isVisible = input.offsetParent !== null && input.offsetWidth > 0;
+            if (isVisible) {
+                addLog('✅ Local Obra encontrado por placeholder (visível)', 'success');
+                return input;
+            }
+        }
+        
+        // Estratégia 4: Por formcontrolname
+        const inputsByName = document.querySelectorAll('input[formcontrolname="localObra"]');
+        for (const input of inputsByName) {
+            const isVisible = input.offsetParent !== null && input.offsetWidth > 0;
+            if (isVisible) {
+                addLog('✅ Local Obra encontrado por formcontrolname (visível)', 'success');
+                return input;
+            }
+        }
+        
+        // Estratégia 5: Procura em todos os inputs visíveis com placeholder similar
+        const allInputs = document.querySelectorAll('input');
+        for (const input of allInputs) {
+            if (input.offsetParent !== null && input.offsetWidth > 0) {
+                if (input.placeholder && input.placeholder.toLowerCase().includes('local')) {
+                    addLog(`✅ Local Obra encontrado por busca: "${input.placeholder}"`, 'success');
+                    return input;
+                }
+            }
+        }
+        
+        addLog('❌ Local Obra NÃO encontrado ou NÃO visível!', 'error');
+        return null;
+    }
+    
+    // ===== FUNÇÃO ESPECÍFICA PARA PREENCHER LOCAL OBRA =====
+    async function preencherLocalObraEspecifico(elemento, valor, descricao = '') {
+        if (!elemento) {
+            addLog(`❌ Campo ${descricao} é nulo`, 'error');
+            return false;
+        }
+        if (valor === undefined || valor === null || valor === '') {
+            addLog(`⏭️ ${descricao} vazio, pulando...`, 'info');
+            return true;
+        }
+        
+        addLog(`📍 Preenchendo ${descricao} com: "${valor}"`, 'info');
+        
+        try {
+            elemento.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            await wait(300);
+            
+            elemento.click();
+            await wait(200);
+            elemento.focus();
+            await wait(200);
+            
+            elemento.value = '';
+            await wait(100);
+            elemento.value = String(valor);
+            elemento.dispatchEvent(new Event('input', { bubbles: true }));
+            elemento.dispatchEvent(new Event('change', { bubbles: true }));
+            await wait(300);
+            
+            elemento.blur();
+            await wait(100);
+            
+            addLog(`✅ ${descricao} preenchido: "${elemento.value}"`, 'success');
+            return true;
+        } catch (e) {
+            addLog(`❌ Erro ao preencher ${descricao}: ${e.message}`, 'error');
+            return false;
+        }
+    }
+    
     async function preencherId(inputId, valor) {
         if (!inputId) return false;
         if (valor === undefined || valor === null || valor === '') return false;
-        
         inputId.focus();
         await wait(100);
         inputId.value = '';
@@ -237,17 +431,14 @@
         inputId.dispatchEvent(new Event('change', { bubbles: true }));
         inputId.blur();
         await wait(100);
-        
         return inputId.value === String(valor);
     }
     
     async function pressionarEnter(elemento, descricao = '') {
         if (!elemento) return false;
-        
         try {
             elemento.focus();
             await wait(100);
-            
             const enterEvent = new KeyboardEvent('keydown', {
                 key: 'Enter',
                 code: 'Enter',
@@ -257,7 +448,6 @@
                 cancelable: true
             });
             elemento.dispatchEvent(enterEvent);
-            
             const keyupEvent = new KeyboardEvent('keyup', {
                 key: 'Enter',
                 code: 'Enter',
@@ -267,12 +457,177 @@
                 cancelable: true
             });
             elemento.dispatchEvent(keyupEvent);
-            
+            addLog(`⌨️ Enter pressionado em: ${descricao}`, 'info');
             await wait(CONFIG.delayAposEnter);
             return true;
         } catch (e) {
             return false;
         }
+    }
+    
+    async function encontrarMaraCode() {
+        addLog('🔍 Procurando campo MaraCode...', 'info');
+        
+        let elemento = await waitForElement('//input[@placeholder="Mara Code"]', 3000);
+        if (elemento) {
+            addLog('✅ MaraCode encontrado por placeholder', 'success');
+            return elemento;
+        }
+        
+        elemento = document.querySelector('input[placeholder="Mara Code"]');
+        if (elemento) {
+            addLog('✅ MaraCode encontrado por CSS selector', 'success');
+            return elemento;
+        }
+        
+        const inputs = document.querySelectorAll('input');
+        for (const input of inputs) {
+            if (input.placeholder && input.placeholder.toLowerCase().includes('mara')) {
+                addLog(`✅ MaraCode encontrado por busca: "${input.placeholder}"`, 'success');
+                return input;
+            }
+        }
+        
+        addLog('❌ MaraCode NÃO encontrado!', 'error');
+        return null;
+    }
+    
+    async function encontrarPesquisaMaterial() {
+        addLog('🔍 Procurando campo Pesquisa Material...', 'info');
+        
+        let elemento = await waitForElement('//input[@placeholder="Material"]', 3000);
+        if (elemento) {
+            const isVisible = elemento.offsetParent !== null && elemento.offsetWidth > 0;
+            if (isVisible) {
+                addLog('✅ Pesquisa Material encontrado (visível)', 'success');
+                return elemento;
+            }
+        }
+        
+        elemento = document.querySelector('input[placeholder="Material"]');
+        if (elemento) {
+            const isVisible = elemento.offsetParent !== null && elemento.offsetWidth > 0;
+            if (isVisible) {
+                addLog('✅ Pesquisa Material encontrado por CSS (visível)', 'success');
+                return elemento;
+            }
+        }
+        
+        const inputs = document.querySelectorAll('input');
+        for (const input of inputs) {
+            if (input.placeholder && input.placeholder.toLowerCase().includes('material')) {
+                const isVisible = input.offsetParent !== null && input.offsetWidth > 0;
+                if (isVisible) {
+                    addLog(`✅ Pesquisa Material encontrado por busca: "${input.placeholder}"`, 'success');
+                    return input;
+                }
+            }
+        }
+        
+        addLog('❌ Pesquisa Material NÃO encontrado ou NÃO visível!', 'error');
+        return null;
+    }
+    
+    async function preencherPesquisaMaterial(inputPesquisa, valor, descricao = '') {
+        if (!inputPesquisa) {
+            addLog(`❌ Campo ${descricao} é nulo`, 'error');
+            return false;
+        }
+        if (valor === undefined || valor === null || valor === '') {
+            addLog(`⏭️ ${descricao} vazio, pulando...`, 'info');
+            return true;
+        }
+        
+        addLog(`🔍 Preenchendo ${descricao} com: "${valor}"`, 'info');
+        
+        try {
+            inputPesquisa.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            await wait(300);
+            
+            inputPesquisa.click();
+            await wait(200);
+            inputPesquisa.focus();
+            await wait(200);
+            
+            inputPesquisa.value = '';
+            await wait(100);
+            inputPesquisa.value = String(valor);
+            inputPesquisa.dispatchEvent(new Event('input', { bubbles: true }));
+            inputPesquisa.dispatchEvent(new Event('change', { bubbles: true }));
+            await wait(300);
+            
+            addLog(`⌨️ Pressionando Enter para pesquisar: ${valor}`, 'info');
+            await pressionarEnter(inputPesquisa, 'Pesquisa Material');
+            
+            await wait(2000);
+            
+            const selectMaterial = await waitForElement(CONFIG.xpaths.selectMaterial, 3000);
+            if (selectMaterial && selectMaterial.value && selectMaterial.value.trim() !== '') {
+                addLog(`✅ Material preenchido automaticamente: "${selectMaterial.value}"`, 'success');
+            } else {
+                addLog(`⚠️ Material NÃO foi preenchido automaticamente`, 'warning');
+            }
+            
+            return true;
+        } catch (e) {
+            addLog(`❌ Erro ao preencher ${descricao}: ${e.message}`, 'error');
+            return false;
+        }
+    }
+    
+    async function aguardarExpansaoFormulario(classe) {
+        const isMaterial = classe && classe.toUpperCase().includes('MISC.TBRA');
+        
+        if (isMaterial) {
+            addLog(`🔍 Detectado MATERIAL (${classe}) - Aguardando expansão...`, 'info');
+            
+            let pesquisaVisible = false;
+            let tentativas = 0;
+            const maxTentativas = 30;
+            
+            while (tentativas < maxTentativas && !pesquisaVisible) {
+                const inputPesquisa = document.querySelector('input[placeholder="Material"]');
+                if (inputPesquisa) {
+                    const isVisible = inputPesquisa.offsetParent !== null && inputPesquisa.offsetWidth > 0;
+                    if (isVisible) {
+                        pesquisaVisible = true;
+                        addLog(`✅ Formulário expandido!`, 'success');
+                        break;
+                    }
+                }
+                tentativas++;
+                await wait(300);
+            }
+            
+            if (!pesquisaVisible) {
+                addLog(`⚠️ Formulário não expandiu`, 'warning');
+            }
+            
+            await wait(CONFIG.delayExpansaoFormulario);
+        } else {
+            addLog(`📋 Serviço detectado (${classe})`, 'info');
+            await wait(500);
+        }
+    }
+    
+    function aguardarPreenchimentoAutomatico(elemento, valorEsperado, timeout = 3000) {
+        return new Promise((resolve) => {
+            const startTime = Date.now();
+            function verificar() {
+                if (elemento.value && elemento.value.trim() !== '') {
+                    addLog(`✅ Campo preenchido automaticamente: "${elemento.value}"`, 'success');
+                    resolve(true);
+                    return;
+                }
+                if (Date.now() - startTime > timeout) {
+                    addLog(`⚠️ Campo não preenchido automaticamente`, 'warning');
+                    resolve(false);
+                    return;
+                }
+                setTimeout(verificar, 300);
+            }
+            verificar();
+        });
     }
     
     function verificarMensagemRetorno() {
@@ -282,54 +637,47 @@
             addLog(`✅ ${texto}`, 'success');
             return { status: 'sucesso', mensagem: texto };
         }
-        
         const mensagemErro = document.querySelector('.alert-danger');
         if (mensagemErro) {
             const texto = mensagemErro.textContent.trim();
             addLog(`❌ ${texto}`, 'error');
             return { status: 'erro', mensagem: texto };
         }
-        
         const mensagens = document.querySelectorAll('.alert');
         for (const msg of mensagens) {
             if (msg.textContent.includes('sucesso') || msg.textContent.includes('Sucesso')) {
                 return { status: 'sucesso', mensagem: msg.textContent.trim() };
             }
-            if (msg.textContent.includes('erro') || msg.textContent.includes('Erro') || msg.textContent.includes('obrigatório')) {
+            if (msg.textContent.includes('erro') || msg.textContent.includes('obrigatório')) {
                 return { status: 'erro', mensagem: msg.textContent.trim() };
             }
         }
-        
         return null;
     }
     
     function detectarColunas(data) {
         if (!data || data.length === 0) return null;
-        
         const headers = Object.keys(data[0]);
-        addLog(`📋 Colunas: ${headers.join(', ')}`, 'info');
+        addLog(`📋 Colunas encontradas: ${headers.join(', ')}`, 'info');
         
         const mapeamento = {};
         const colunasEsperadas = {
-            'ID': ['id', 'Id', 'ID', 'Codigo', 'Código', 'Cod', 'NUMERO', 'Numero'],
+            'ID': ['id', 'Id', 'ID', 'Codigo', 'Cod', 'NUMERO', 'Numero'],
             'PRANCHA': ['prancha', 'Prancha', 'PRANCHA'],
             'CLASSE': ['classe', 'Classe', 'CLASSE'],
-            'MARACODE': ['maracode', 'MaraCode', 'MARACODE', 'mara code'],
-            'ITEM': ['item', 'Item', 'ITEM'],
-            'QTD SERVICO EXECUTADO': ['qtd servico executado', 'Qtd Servico Executado', 'servico executado'],
-            'PESQUISA MATERIAL': ['pesquisa material', 'Pesquisa Material', 'material pesquisa'],
-            'MATERIAL': ['material', 'Material', 'MATERIAL'],
-            'QTD MATERIAL': ['qtd material', 'Qtd Material', 'quantidade material'],
-            'LOCAL EXECUCAO OBRA': ['local execucao obra', 'Local Execucao Obra', 'local obra']
+            'MARACODE': ['maracode', 'MaraCode', 'MARACODE', 'MARACOD'],
+            'QTD SERVICO EXECUTADO': ['qtd servico executado', 'Qtd Servico Executado', 'servico executado', 'QTD_SERVICO'],
+            'PESQUISA MATERIAL': ['pesquisa material', 'Pesquisa Material', 'material pesquisa', 'PESQUISA_MATERIAL', 'PESQUISA MATERIA'],
+            'QTD MATERIAL': ['qtd material', 'Qtd Material', 'quantidade material', 'QTD_MATERIAL', 'QTD MATERIA'],
+            'LOCAL EXECUCAO OBRA': ['local execucao obra', 'Local Execucao Obra', 'local obra', 'LOCAL_EXECUCAO', 'LOCAL EXECUCAO OBR']
         };
         
         for (const [campo, variacoes] of Object.entries(colunasEsperadas)) {
             for (const variacao of variacoes) {
-                const chave = headers.find(h => 
-                    h.toLowerCase().trim() === variacao.toLowerCase().trim()
-                );
+                const chave = headers.find(h => h.toLowerCase().trim() === variacao.toLowerCase().trim());
                 if (chave) {
                     mapeamento[campo] = chave;
+                    addLog(`✅ Mapeou "${campo}" -> coluna "${chave}"`, 'success');
                     break;
                 }
             }
@@ -340,6 +688,7 @@
                         if (headerLower.includes(variacao.toLowerCase().trim()) || 
                             variacao.toLowerCase().trim().includes(headerLower)) {
                             mapeamento[campo] = header;
+                            addLog(`✅ Mapeou "${campo}" -> coluna "${header}" (similar)`, 'success');
                             break;
                         }
                     }
@@ -353,17 +702,13 @@
             addLog(`⚠️ Usando primeira coluna como ID: "${headers[0]}"`, 'warning');
         }
         
+        addLog(`📊 Mapeamento final: ${JSON.stringify(mapeamento, null, 2)}`, 'info');
         return mapeamento;
     }
     
     function addLog(mensagem, tipo = 'info') {
-        const entry = {
-            timestamp: new Date().toLocaleTimeString(),
-            mensagem,
-            tipo
-        };
+        const entry = { timestamp: new Date().toLocaleTimeString(), mensagem, tipo };
         log.push(entry);
-        
         const logContainer = document.getElementById('auto-log');
         if (logContainer) {
             const div = document.createElement('div');
@@ -374,131 +719,57 @@
         }
     }
     
-    // ===== FUNÇÃO PARA MOSTRAR ALERTA DE FINALIZAÇÃO =====
     function mostrarAlertaFinalizacao() {
         const sucessos = relatorio.filter(r => r.status === 'sucesso').length;
         const erros = relatorio.filter(r => r.status === 'erro').length;
         const pulados = relatorio.filter(r => r.status === 'pulado').length;
         const total = relatorio.length;
         
-        // Cria o alerta
         const alerta = document.createElement('div');
         alerta.style.cssText = `
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 99999;
-            background: white;
-            padding: 30px 40px;
-            border-radius: 12px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            min-width: 400px;
-            max-width: 500px;
-            text-align: center;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            z-index: 99999; background: white; padding: 30px 40px; border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3); min-width: 400px; max-width: 500px;
+            text-align: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             animation: alertaFadeIn 0.4s ease;
         `;
         
         const icon = erros > 0 ? '⚠️' : '✅';
         const cor = erros > 0 ? '#dc3545' : '#28a745';
-        const titulo = erros > 0 ? 'Processo Finalizado!' : 'Processo Finalizado com Sucesso!';
+        const titulo = erros > 0 ? 'Processo Finalizado com Alertas!' : 'Processo Finalizado com Sucesso!';
         
         alerta.innerHTML = `
             <div style="font-size: 48px; margin-bottom: 10px;">${icon}</div>
             <h2 style="color: ${cor}; margin: 0 0 15px 0; font-size: 22px;">${titulo}</h2>
             <div style="display: flex; gap: 15px; justify-content: center; margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;">
-                <div>
-                    <div style="font-size: 28px; font-weight: 600; color: #28a745;">${sucessos}</div>
-                    <div style="font-size: 12px; color: #6c757d;">✅ Sucessos</div>
-                </div>
-                <div>
-                    <div style="font-size: 28px; font-weight: 600; color: #dc3545;">${erros}</div>
-                    <div style="font-size: 12px; color: #6c757d;">❌ Erros</div>
-                </div>
-                <div>
-                    <div style="font-size: 28px; font-weight: 600; color: #ffc107;">${pulados}</div>
-                    <div style="font-size: 12px; color: #6c757d;">⏭️ Pulados</div>
-                </div>
-                <div>
-                    <div style="font-size: 28px; font-weight: 600; color: #17a2b8;">${total}</div>
-                    <div style="font-size: 12px; color: #6c757d;">📊 Total</div>
-                </div>
+                <div><div style="font-size: 28px; font-weight: 600; color: #28a745;">${sucessos}</div><div style="font-size: 12px; color: #6c757d;">✅ Sucessos</div></div>
+                <div><div style="font-size: 28px; font-weight: 600; color: #dc3545;">${erros}</div><div style="font-size: 12px; color: #6c757d;">❌ Erros</div></div>
+                <div><div style="font-size: 28px; font-weight: 600; color: #ffc107;">${pulados}</div><div style="font-size: 12px; color: #6c757d;">⏭️ Pulados</div></div>
+                <div><div style="font-size: 28px; font-weight: 600; color: #17a2b8;">${total}</div><div style="font-size: 12px; color: #6c757d;">📊 Total</div></div>
             </div>
-            <div style="font-size: 13px; color: #6c757d; margin-bottom: 15px;">
-                Clique em "Ver Relatório" para detalhes
-            </div>
+            <div style="font-size: 13px; color: #6c757d; margin-bottom: 15px;">Clique em "Ver Relatório" para detalhes</div>
             <div style="display: flex; gap: 10px; justify-content: center;">
-                <button id="btn-alerta-fechar" style="
-                    padding: 8px 25px;
-                    background: #6c757d;
-                    color: white;
-                    border: none;
-                    border-radius: 6px;
-                    cursor: pointer;
-                    font-size: 14px;
-                    transition: all 0.3s ease;
-                ">Fechar</button>
-                <button id="btn-alerta-relatorio" style="
-                    padding: 8px 25px;
-                    background: #17a2b8;
-                    color: white;
-                    border: none;
-                    border-radius: 6px;
-                    cursor: pointer;
-                    font-size: 14px;
-                    transition: all 0.3s ease;
-                ">📊 Ver Relatório</button>
+                <button id="btn-alerta-fechar" style="padding: 8px 25px; background: #6c757d; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">Fechar</button>
+                <button id="btn-alerta-relatorio" style="padding: 8px 25px; background: #17a2b8; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">📊 Ver Relatório</button>
             </div>
         `;
-        
         document.body.appendChild(alerta);
         
-        // Adiciona estilos da animação
         if (!document.getElementById('alerta-styles')) {
             const style = document.createElement('style');
             style.id = 'alerta-styles';
-            style.textContent = `
-                @keyframes alertaFadeIn {
-                    from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
-                    to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-                }
-            `;
+            style.textContent = `@keyframes alertaFadeIn { from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }`;
             document.head.appendChild(style);
         }
         
-        // Overlay de fundo
         const overlay = document.createElement('div');
         overlay.id = 'alerta-overlay';
-        overlay.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.5);
-            z-index: 99998;
-            animation: alertaFadeIn 0.3s ease;
-        `;
+        overlay.style.cssText = `position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 99998; animation: alertaFadeIn 0.3s ease;`;
         document.body.appendChild(overlay);
         
-        // Eventos dos botões
-        document.getElementById('btn-alerta-fechar').addEventListener('click', () => {
-            alerta.remove();
-            overlay.remove();
-        });
-        
-        document.getElementById('btn-alerta-relatorio').addEventListener('click', () => {
-            alerta.remove();
-            overlay.remove();
-            baixarRelatorio();
-        });
-        
-        // Fecha ao clicar no overlay
-        overlay.addEventListener('click', () => {
-            alerta.remove();
-            overlay.remove();
-        });
+        document.getElementById('btn-alerta-fechar').addEventListener('click', () => { alerta.remove(); overlay.remove(); });
+        document.getElementById('btn-alerta-relatorio').addEventListener('click', () => { alerta.remove(); overlay.remove(); baixarRelatorio(); });
+        overlay.addEventListener('click', () => { alerta.remove(); overlay.remove(); });
     }
     
     function atualizarStatusPopup() {
@@ -508,7 +779,6 @@
             const sucessos = relatorio.filter(r => r.status === 'sucesso').length;
             const erros = relatorio.filter(r => r.status === 'erro').length;
             const pulados = relatorio.filter(r => r.status === 'pulado').length;
-            
             if (total > 0) {
                 statusText.textContent = `✅ ${sucessos} OK | ❌ ${erros} ERRO | ⏭️ ${pulados} PULADO`;
                 statusText.style.color = erros > 0 ? '#dc3545' : '#28a745';
@@ -521,7 +791,6 @@
             addLog('⚠️ Nenhum dado para gerar relatório', 'warning');
             return;
         }
-        
         const sucessos = relatorio.filter(r => r.status === 'sucesso').length;
         const erros = relatorio.filter(r => r.status === 'erro').length;
         const pulados = relatorio.filter(r => r.status === 'pulado').length;
@@ -531,19 +800,15 @@
         relatorioTexto += `Data: ${new Date().toLocaleString()}\n`;
         relatorioTexto += `Total de registros: ${relatorio.length}\n`;
         relatorioTexto += '========================================\n\n';
-        
         relatorioTexto += `✅ Sucessos: ${sucessos}\n`;
         relatorioTexto += `❌ Erros: ${erros}\n`;
         relatorioTexto += `⏭️ Pulados: ${pulados}\n`;
         relatorioTexto += `📊 Total: ${relatorio.length}\n`;
         relatorioTexto += '========================================\n\n';
-        
         relatorioTexto += 'DETALHES DOS REGISTROS:\n';
         relatorioTexto += '----------------------------------------\n';
-        
         relatorio.forEach((item, index) => {
-            const statusEmoji = item.status === 'sucesso' ? '✅' : 
-                               item.status === 'erro' ? '❌' : '⏭️';
+            const statusEmoji = item.status === 'sucesso' ? '✅' : item.status === 'erro' ? '❌' : '⏭️';
             const statusLabel = item.status.toUpperCase();
             relatorioTexto += `${index + 1}. ID: ${item.id} - ${statusEmoji} ${statusLabel}\n`;
             if (item.mensagem) {
@@ -555,18 +820,15 @@
             relatorioTexto += `   Dados: ${JSON.stringify(item.dados)}\n`;
             relatorioTexto += '----------------------------------------\n';
         });
-        
         relatorioTexto += '\n========================================\n';
         relatorioTexto += 'FIM DO RELATÓRIO\n';
         relatorioTexto += '========================================\n';
-        
         return relatorioTexto;
     }
     
     function baixarRelatorio() {
         const relatorioTexto = gerarRelatorio();
         if (!relatorioTexto) return;
-        
         const blob = new Blob([relatorioTexto], { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -576,7 +838,6 @@
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        
         addLog(`📥 Relatório baixado com ${relatorio.length} registros`, 'success');
     }
     
@@ -597,7 +858,22 @@
             return { sucesso: false, erro: erro, pulado: true };
         }
         
-        addLog(`📝 ID: ${idValue}`, 'info');
+        addLog(`📝 Processando ID: ${idValue}`, 'info');
+        
+        const prancha = dados['PRANCHA'] || dados['Prancha'] || '';
+        const classe = dados['CLASSE'] || dados['Classe'] || '';
+        const maraCode = dados['MARACODE'] || dados['MaraCode'] || '';
+        const qtdServico = dados['QTD SERVICO EXECUTADO'] || dados['Qtd Servico Executado'] || '';
+        const pesquisaMaterial = dados['PESQUISA MATERIAL'] || dados['Pesquisa Material'] || '';
+        const qtdMaterial = dados['QTD MATERIAL'] || dados['Qtd Material'] || '';
+        const localObra = dados['LOCAL EXECUCAO OBRA'] || dados['Local Execucao Obra'] || '';
+        
+        addLog(`📋 Classe: ${classe || 'N/A'}`, 'info');
+        addLog(`📋 MaraCode: "${maraCode}"`, 'info');
+        addLog(`📋 Qtd Serviço: "${qtdServico}"`, 'info');
+        addLog(`📋 Pesquisa Material: "${pesquisaMaterial}"`, 'info');
+        addLog(`📋 Qtd Material: "${qtdMaterial}"`, 'info');
+        addLog(`📋 Local Obra: "${localObra}"`, 'info');
         
         try {
             // ===== PASSO 1: COLLAPSE =====
@@ -730,58 +1006,118 @@
             
             await wait(500);
             
-            // ===== PASSO 9: PREENCHER FORMULÁRIO =====
-            const prancha = dados['PRANCHA'] || '';
-            const classe = dados['CLASSE'] || '';
-            const maraCode = dados['MARACODE'] || '';
-            const item = dados['ITEM'] || '';
-            const qtdServico = dados['QTD SERVICO EXECUTADO'] || '';
-            const pesquisaMaterial = dados['PESQUISA MATERIAL'] || '';
-            const qtdMaterial = dados['QTD MATERIAL'] || '';
-            const localObra = dados['LOCAL EXECUCAO OBRA'] || '';
+            // ============================================
+            // PASSO 9: PREENCHER FORMULÁRIO
+            // ============================================
+            addLog('✏️ Preenchendo formulário...', 'info');
             
-            const itemVazio = !item || item === '';
+            // 1. PRANCHA
+            const inputPrancha = await waitForElement(CONFIG.xpaths.inputPrancha, 3000);
+            await preencherCampo(inputPrancha, prancha, 'Prancha');
             
-            if (itemVazio) {
-                addLog(`⚠️ ITEM vazio, pulando materiais`, 'warning');
+            // 2. CLASSE
+            const selectClasse = await waitForElement(CONFIG.xpaths.selectClasse, 3000);
+            await preencherCampo(selectClasse, classe, 'Classe');
+            
+            // 3. MARACODE
+            if (maraCode) {
+                addLog(`🔢 Procurando campo MaraCode para inserir: "${maraCode}"`, 'info');
+                const inputMaraCode = await encontrarMaraCode();
+                
+                if (inputMaraCode) {
+                    inputMaraCode.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    await wait(300);
+                    inputMaraCode.click();
+                    await wait(200);
+                    inputMaraCode.focus();
+                    await wait(200);
+                    
+                    inputMaraCode.value = '';
+                    await wait(100);
+                    inputMaraCode.value = String(maraCode);
+                    inputMaraCode.dispatchEvent(new Event('input', { bubbles: true }));
+                    inputMaraCode.dispatchEvent(new Event('change', { bubbles: true }));
+                    await wait(300);
+                    
+                    addLog(`⌨️ Pressionando Enter no MaraCode: ${maraCode}`, 'info');
+                    await pressionarEnter(inputMaraCode, 'MaraCode');
+                    
+                    const selectItem = await waitForElement(CONFIG.xpaths.selectItem, 3000);
+                    if (selectItem) {
+                        await aguardarPreenchimentoAutomatico(selectItem, '');
+                        addLog(`✅ Item preenchido automaticamente: "${selectItem.value}"`, 'success');
+                    }
+                    
+                    await aguardarExpansaoFormulario(classe);
+                } else {
+                    addLog(`❌ Campo MaraCode NÃO encontrado!`, 'error');
+                }
+            } else {
+                addLog(`⏭️ MaraCode vazio, pulando...`, 'info');
             }
             
-            // Preenche campos
-            const inputPrancha = await waitForElement('//input[@id="demPrancha"]', 3000);
-            if (inputPrancha) await preencherCampoRapido(inputPrancha, prancha, 'Prancha');
-            
-            const selectClasse = await waitForElement('//select[@id="demClasse"]', 3000);
-            if (selectClasse) await preencherCampoRapido(selectClasse, classe, 'Classe');
-            
-            const inputMaraCode = await waitForElement('//input[@placeholder="Mara Code"]', 3000);
-            if (inputMaraCode && maraCode) {
-                await preencherCampoRapido(inputMaraCode, maraCode, 'MaraCode');
-                await pressionarEnter(inputMaraCode, 'MaraCode');
+            // 4. QTD SERVIÇO EXECUTADO
+            const inputQtdServico = await waitForElement(CONFIG.xpaths.inputQtdServico, 3000);
+            if (inputQtdServico) {
+                await preencherQtdServico(inputQtdServico, qtdServico, 'Qtd Serviço Executado');
             }
             
-            const selectItem = await waitForElement('//select[@id="maraCode"]', 3000);
-            if (selectItem) await preencherCampoRapido(selectItem, item, 'Item');
-            
-            const inputQtd = await waitForElement('//input[@id="qtdServicoExecutado"]', 3000);
-            if (inputQtd) await preencherCampoRapido(inputQtd, qtdServico, 'Qtd Serviço');
-            
-            if (!itemVazio && pesquisaMaterial) {
-                const inputPesquisa = await waitForElement('//input[@placeholder="Material"]', 3000);
+            // 5. PESQUISA MATERIAL
+            if (pesquisaMaterial) {
+                addLog(`🔍 Buscando campo Pesquisa Material para inserir: "${pesquisaMaterial}"`, 'info');
+                const inputPesquisa = await encontrarPesquisaMaterial();
+                
                 if (inputPesquisa) {
-                    await preencherCampoRapido(inputPesquisa, pesquisaMaterial, 'Pesquisa Material');
-                    await pressionarEnter(inputPesquisa, 'Pesquisa Material');
+                    await preencherPesquisaMaterial(inputPesquisa, pesquisaMaterial, 'Pesquisa Material');
+                } else {
+                    addLog(`❌ Campo Pesquisa Material NÃO encontrado!`, 'error');
+                    await wait(2000);
+                    
+                    const inputPesquisa2 = await encontrarPesquisaMaterial();
+                    if (inputPesquisa2) {
+                        await preencherPesquisaMaterial(inputPesquisa2, pesquisaMaterial, 'Pesquisa Material (2ª tentativa)');
+                    }
+                }
+            } else {
+                addLog(`⏭️ Pesquisa Material vazio, pulando...`, 'info');
+            }
+            
+            // 6. QTD MATERIAL
+            const inputQtdMaterial = await waitForElement(CONFIG.xpaths.inputQtdMaterial, 3000);
+            if (inputQtdMaterial) {
+                if (qtdMaterial && String(qtdMaterial) !== String(idValue)) {
+                    const valorConvertido = converterNumero(qtdMaterial);
+                    addLog(`📦 Preenchendo Qtd Material com: "${valorConvertido}" (original: "${qtdMaterial}")`, 'info');
+                    await preencherCampo(inputQtdMaterial, valorConvertido, 'Qtd Material');
+                } else {
+                    addLog(`⏭️ Qtd Material ignorado (vazio ou igual ao ID)`, 'info');
                 }
             }
             
-            if (!itemVazio && qtdMaterial) {
-                const inputQtdMat = await waitForElement('//input[@id="qtdMaterial"]', 3000);
-                if (inputQtdMat) await preencherCampoRapido(inputQtdMat, qtdMaterial, 'Qtd Material');
+            // 7. LOCAL EXECUÇÃO OBRA - USANDO FUNÇÃO ESPECÍFICA
+            if (localObra) {
+                addLog(`📍 Buscando campo Local Execução Obra para inserir: "${localObra}"`, 'info');
+                const inputLocalObra = await encontrarLocalObra();
+                
+                if (inputLocalObra) {
+                    await preencherLocalObraEspecifico(inputLocalObra, localObra, 'Local Execução Obra');
+                } else {
+                    addLog(`❌ Campo Local Execução Obra NÃO encontrado!`, 'error');
+                    await wait(2000);
+                    const inputLocalObra2 = await encontrarLocalObra();
+                    if (inputLocalObra2) {
+                        await preencherLocalObraEspecifico(inputLocalObra2, localObra, 'Local Execução Obra (2ª tentativa)');
+                    } else {
+                        addLog(`❌ Falha ao encontrar Local Obra após 2 tentativas`, 'error');
+                    }
+                }
+            } else {
+                addLog(`⏭️ Local Execução Obra vazio, pulando...`, 'info');
             }
             
-            const inputLocal = await waitForElement('//input[@id="localObra"]', 3000);
-            if (inputLocal) await preencherCampoRapido(inputLocal, localObra, 'Local Obra');
-            
-            // ===== PASSO 10: SALVAR E VERIFICAR =====
+            // ============================================
+            // PASSO 10: SALVAR
+            // ============================================
             if (!CONFIG.modoTeste) {
                 let btnSalvar = document.querySelector('button.btn.btn-primary.mt-4.float-right');
                 if (!btnSalvar) btnSalvar = document.querySelector('button[type="submit"].btn-primary.float-right');
@@ -802,7 +1138,6 @@
                     addLog('💾 Salvando...', 'info');
                     await wait(CONFIG.delayAposSalvar);
                     
-                    // ===== VERIFICA MENSAGEM DE RETORNO =====
                     const resultado = verificarMensagemRetorno();
                     
                     if (resultado) {
@@ -825,8 +1160,7 @@
                             addLog(`❌ ID ${idValue} falhou: ${resultado.mensagem}`, 'error');
                         }
                     } else {
-                        // Se não encontrou mensagem, considera como sucesso (fallback)
-                        addLog(`⚠️ Nenhuma mensagem de retorno detectada para ID ${idValue}`, 'warning');
+                        addLog(`⚠️ Nenhuma mensagem de retorno para ID ${idValue}`, 'warning');
                         relatorio.push({
                             id: idValue,
                             status: 'sucesso',
@@ -835,7 +1169,6 @@
                         });
                     }
                     
-                    // Atualiza status do popup
                     atualizarStatusPopup();
                     
                     // ===== FECHAR =====
@@ -864,8 +1197,7 @@
                     return { sucesso: false, erro: erro };
                 }
             } else {
-                // Modo teste
-                addLog(`🧪 MODO TESTE: ID ${idValue} simulado com sucesso`, 'success');
+                addLog(`🧪 TESTE: ID ${idValue} simulado`, 'success');
                 relatorio.push({
                     id: idValue,
                     status: 'sucesso',
@@ -949,26 +1281,18 @@
         
         estaExecutando = false;
         
-        // Calcula estatísticas finais
         const sucessos = relatorio.filter(r => r.status === 'sucesso').length;
         const erros = relatorio.filter(r => r.status === 'erro').length;
         const pulados = relatorio.filter(r => r.status === 'pulado').length;
         
-        const mensagem = `✅ Finalizado! ${sucessos} sucessos, ${erros} erros, ${pulados} pulados`;
-        addLog(mensagem, 'success');
+        addLog(`✅ Finalizado! ${sucessos} sucessos, ${erros} erros, ${pulados} pulados`, 'success');
         addLog(`📊 Relatório gerado com ${relatorio.length} registros`, 'info');
         
-        // Atualiza botões
         document.getElementById('popup-btn-iniciar').disabled = false;
         document.getElementById('popup-btn-parar').disabled = true;
         document.getElementById('popup-btn-relatorio').disabled = false;
         
-        // Atualiza status final
         atualizarStatusPopup();
-        
-        // ============================================
-        // MOSTRA ALERTA DE FINALIZAÇÃO
-        // ============================================
         mostrarAlertaFinalizacao();
     }
     
@@ -1075,7 +1399,7 @@
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid #e9ecef;">
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <span style="font-size: 22px;">⚡</span>
-                    <h3 style="margin: 0; color: #212529; font-size: 16px;">Cadastramento automático (serviços/materiais)</h3>
+                    <h3 style="margin: 0; color: #212529; font-size: 16px;">Automação Serviços</h3>
                 </div>
                 <button id="btn-fechar-popup" style="
                     background: none;
@@ -1447,11 +1771,12 @@
         });
         html += '</tr></thead><tbody>';
         
-        const maxRows = Math.min(3, data.length);
+        const maxRows = Math.min(5, data.length);
         for (let i = 0; i < maxRows; i++) {
             html += '<tr>';
             headers.forEach(h => {
-                html += `<td style="padding:2px 4px;border-bottom:1px solid #e9ecef;">${data[i][h] || ''}</td>`;
+                const value = data[i][h] || '';
+                html += `<td style="padding:2px 4px;border-bottom:1px solid #e9ecef;">${value}</td>`;
             });
             html += '</tr>';
         }
