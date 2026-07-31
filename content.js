@@ -6,7 +6,7 @@
     'use strict';
     
     console.log('🤖 Automação de Serviços/Materiais carregada!');
-    console.log('📋 Versão OTIMIZADA - Mais rápida');
+    console.log('📋 Versão com LOGS DETALHADOS');
     
     // ===== CONFIGURAÇÕES OTIMIZADAS =====
     const CONFIG = {
@@ -30,17 +30,16 @@
             inputLocalObra: '//*[@id="localObra"]'
         },
         
-        // ===== DELAYS OTIMIZADOS (MAIS RÁPIDOS) =====
-        delayEntreCadastros: 2000,        // Reduzido de 3000 para 2000ms
-        delayPreenchimento: 150,          // Reduzido de 300 para 150ms
-        delayAposBusca: 1500,             // Reduzido de 2000 para 1500ms
-        delayAposClick: 300,              // Reduzido de 500 para 300ms
-        delayAposNavegacao: 1500,         // Reduzido de 2000 para 1500ms
-        delayAposSalvar: 2000,            // Reduzido de 3000 para 2000ms
-        delayAposEnter: 400,              // Reduzido de 800 para 400ms
-        delayAposFechar: 300,             // Reduzido de 500 para 300ms
-        delayExpansaoFormulario: 2000,    // Reduzido de 3000 para 2000ms
-        delayAposPreencher: 200,          // Reduzido de 500 para 200ms
+        delayEntreCadastros: 2000,
+        delayPreenchimento: 150,
+        delayAposBusca: 1500,
+        delayAposClick: 300,
+        delayAposNavegacao: 1500,
+        delayAposSalvar: 2000,
+        delayAposEnter: 400,
+        delayAposFechar: 300,
+        delayExpansaoFormulario: 2000,
+        delayAposPreencher: 200,
         modoTeste: false
     };
     
@@ -125,7 +124,7 @@
     }
     
     // ============================================
-    // CLASSE PROCESSADOR_CSV - COM CORREÇÃO UTF-8
+    // CLASSE PROCESSADOR_CSV
     // ============================================
     class ProcessadorCSV {
         constructor() {
@@ -137,19 +136,13 @@
         processar(texto) {
             console.log('📄 Processando CSV...');
             
-            // ===== CORREÇÃO UTF-8 =====
-            // Remove BOM se existir
             if (texto.startsWith('\uFEFF')) {
                 texto = texto.substring(1);
             }
             
-            // Tenta decodificar corretamente caracteres especiais
             try {
-                // Converte para o formato correto de string
                 texto = decodeURIComponent(escape(texto));
-            } catch (e) {
-                console.log('⚠️ Não foi possível decodificar, mantendo texto original');
-            }
+            } catch (e) {}
             
             let delimitador = ',';
             const primeiraLinha = texto.split('\n')[0];
@@ -183,7 +176,6 @@
             return this.dados;
         }
         
-        // ===== MAPEAMENTO POR NOME =====
         mapearColunas() {
             const mapeamento = {};
             
@@ -235,7 +227,7 @@
                 }
             }
             
-            // ===== CORREÇÃO: Verifica se PESQUISA MATERIAL está vazio =====
+            // Correção: Verifica se PESQUISA MATERIAL está vazio
             if (mapeamento['PESQUISA MATERIAL']) {
                 const colunaPesquisa = mapeamento['PESQUISA MATERIAL'];
                 let temDados = false;
@@ -265,7 +257,7 @@
                 }
             }
             
-            // ===== CORREÇÃO: Verifica se QTD MATERIAL está correto =====
+            // Correção: Verifica se QTD MATERIAL está correto
             if (mapeamento['QTD MATERIAL']) {
                 const colunaQtd = mapeamento['QTD MATERIAL'];
                 let pareceCodigo = false;
@@ -321,7 +313,7 @@
     }
     
     // ============================================
-    // CLASSE AUTOMACAO - OTIMIZADA
+    // CLASSE AUTOMACAO - COM LOGS DETALHADOS
     // ============================================
     class Automacao {
         constructor() {
@@ -332,9 +324,10 @@
             this.log = [];
             this.popupAberto = false;
             this.fileInput = null;
+            this.dadosAtuais = null; // Guarda os dados atuais para debug
         }
         
-        // ===== FUNÇÕES AUXILIARES OTIMIZADAS =====
+        // ===== FUNÇÕES AUXILIARES =====
         
         wait(ms) {
             return new Promise(resolve => setTimeout(resolve, ms));
@@ -542,7 +535,7 @@
             }
             
             let valorFinal = this.converterNumero(valor);
-            this.addLog(`🔢 ${descricao}: ${valorFinal}`, 'info');
+            this.addLog(`🔢 ${descricao}: ${valorFinal} (original: ${valor})`, 'info');
             
             try {
                 elemento.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -580,6 +573,7 @@
                     return true;
                 }
                 
+                this.addLog(`⚠️ ${descricao} NÃO preenchido. Valor atual: "${elemento.value}"`, 'warning');
                 return false;
             } catch (e) {
                 this.addLog(`❌ Erro ${descricao}: ${e.message}`, 'error');
@@ -588,7 +582,7 @@
         }
         
         async encontrarLocalObra() {
-            this.addLog('🔍 Local Obra...', 'info');
+            this.addLog('🔍 Procurando Local Obra...', 'info');
             
             await this.wait(500);
             
@@ -596,7 +590,7 @@
             if (elemento) {
                 const isVisible = elemento.offsetParent !== null && elemento.offsetWidth > 0;
                 if (isVisible) {
-                    this.addLog('✅ Local Obra encontrado', 'success');
+                    this.addLog('✅ Local Obra encontrado (ID)', 'success');
                     return elemento;
                 }
             }
@@ -624,15 +618,6 @@
                 const isVisible = input.offsetParent !== null && input.offsetWidth > 0;
                 if (isVisible) {
                     this.addLog('✅ Local Obra encontrado (placeholder)', 'success');
-                    return input;
-                }
-            }
-            
-            const inputsByName = document.querySelectorAll('input[formcontrolname="localObra"]');
-            for (const input of inputsByName) {
-                const isVisible = input.offsetParent !== null && input.offsetWidth > 0;
-                if (isVisible) {
-                    this.addLog('✅ Local Obra encontrado (formcontrol)', 'success');
                     return input;
                 }
             }
@@ -730,11 +715,11 @@
         }
         
         async encontrarMaraCode() {
-            this.addLog('🔍 MaraCode...', 'info');
+            this.addLog('🔍 Procurando MaraCode...', 'info');
             
             let elemento = await this.waitForElement('//input[@placeholder="Mara Code"]', 2000);
             if (elemento) {
-                this.addLog('✅ MaraCode encontrado', 'success');
+                this.addLog('✅ MaraCode encontrado (placeholder)', 'success');
                 return elemento;
             }
             
@@ -757,7 +742,7 @@
         }
         
         async encontrarPesquisaMaterial() {
-            this.addLog('🔍 Pesquisa Material...', 'info');
+            this.addLog('🔍 Procurando Pesquisa Material...', 'info');
             
             await this.wait(1000);
             
@@ -765,7 +750,7 @@
             if (elemento) {
                 const isVisible = elemento.offsetParent !== null && elemento.offsetWidth > 0;
                 if (isVisible) {
-                    this.addLog('✅ Pesquisa Material encontrado', 'success');
+                    this.addLog('✅ Pesquisa Material encontrado (placeholder)', 'success');
                     return elemento;
                 }
             }
@@ -829,7 +814,9 @@
                 
                 const selectMaterial = await this.waitForElement(CONFIG.xpaths.selectMaterial, 2000);
                 if (selectMaterial && selectMaterial.value && selectMaterial.value.trim() !== '') {
-                    this.addLog(`✅ Material preenchido: "${selectMaterial.value}"`, 'success');
+                    this.addLog(`✅ Material preenchido automaticamente: "${selectMaterial.value}"`, 'success');
+                } else {
+                    this.addLog(`⚠️ Material NÃO foi preenchido automaticamente`, 'warning');
                 }
                 
                 await this.wait(CONFIG.delayAposPreencher);
@@ -844,7 +831,7 @@
             const isMaterial = classe && classe.toUpperCase().includes('MISC.TBRA');
             
             if (isMaterial) {
-                this.addLog(`🔍 MATERIAL (${classe}) - expandindo...`, 'info');
+                this.addLog(`🔍 MATERIAL (${classe}) - Aguardando expansão...`, 'info');
                 
                 let pesquisaVisible = false;
                 let tentativas = 0;
@@ -856,7 +843,7 @@
                         const isVisible = inputPesquisa.offsetParent !== null && inputPesquisa.offsetWidth > 0;
                         if (isVisible) {
                             pesquisaVisible = true;
-                            this.addLog(`✅ Formulário expandido!`, 'success');
+                            this.addLog(`✅ Formulário expandido! (tentativa ${tentativas + 1})`, 'success');
                             break;
                         }
                     }
@@ -865,7 +852,7 @@
                 }
                 
                 if (!pesquisaVisible) {
-                    this.addLog(`⚠️ Formulário não expandiu`, 'warning');
+                    this.addLog(`⚠️ Formulário não expandiu após ${maxTentativas} tentativas`, 'warning');
                     await this.wait(1000);
                 }
                 
@@ -882,12 +869,12 @@
                 const self = this;
                 function verificar() {
                     if (elemento.value && elemento.value.trim() !== '') {
-                        self.addLog(`✅ Item: "${elemento.value}"`, 'success');
+                        self.addLog(`✅ Item preenchido automaticamente: "${elemento.value}"`, 'success');
                         resolve(true);
                         return;
                     }
                     if (Date.now() - startTime > timeout) {
-                        self.addLog(`⚠️ Item não preenchido`, 'warning');
+                        self.addLog(`⚠️ Item NÃO foi preenchido automaticamente`, 'warning');
                         resolve(false);
                         return;
                     }
@@ -910,6 +897,17 @@
                 this.addLog(`❌ ${texto}`, 'error');
                 return { status: 'erro', mensagem: texto };
             }
+            
+            // Procura por mensagens de erro em outros lugares
+            const mensagensErro = document.querySelectorAll('.alert.alert-danger, .alert-danger, .error-message, .form-error');
+            for (const msg of mensagensErro) {
+                if (msg.textContent && msg.textContent.trim() !== '') {
+                    const texto = msg.textContent.trim();
+                    this.addLog(`❌ ${texto}`, 'error');
+                    return { status: 'erro', mensagem: texto };
+                }
+            }
+            
             return null;
         }
         
@@ -933,16 +931,33 @@
             return resultado;
         }
         
-        addLog(mensagem, tipo = 'info') {
-            const entry = { timestamp: new Date().toLocaleTimeString(), mensagem, tipo };
+        addLog(mensagem, tipo = 'info', dados = null) {
+            const entry = { 
+                timestamp: new Date().toLocaleTimeString(), 
+                mensagem, 
+                tipo,
+                dados: dados ? JSON.stringify(dados) : null
+            };
             this.log.push(entry);
+            
             const logContainer = document.getElementById('auto-log');
             if (logContainer) {
                 const div = document.createElement('div');
                 div.className = `log-entry log-${tipo}`;
-                div.textContent = `[${entry.timestamp}] ${mensagem}`;
+                let texto = `[${entry.timestamp}] ${mensagem}`;
+                if (dados) {
+                    texto += ` | ${JSON.stringify(dados)}`;
+                }
+                div.textContent = texto;
                 logContainer.appendChild(div);
                 logContainer.scrollTop = logContainer.scrollHeight;
+            }
+            
+            // Log no console com dados
+            if (dados) {
+                console.log(`[${entry.timestamp}] ${mensagem}`, dados);
+            } else {
+                console.log(`[${entry.timestamp}] ${mensagem}`);
             }
         }
         
@@ -964,19 +979,24 @@
             this.processador.dados = dados;
         }
         
-        // ===== EXECUÇÃO PRINCIPAL OTIMIZADA =====
+        // ===== EXECUÇÃO PRINCIPAL COM LOGS DETALHADOS =====
         async executarCadastro(dados, index) {
             const idValue = dados['ID'] || dados['id'] || dados['Id'];
             const classe = dados['CLASSE'] || dados['Classe'] || '';
             const isMaterial = classe.toUpperCase().includes('MISC.TBRA');
             
-            this.addLog(`📝 ${index + 1}/${this.dados.totalRegistros} - ID: ${idValue} | ${isMaterial ? 'MATERIAL' : 'SERVIÇO'}`, 'info');
+            // Guarda os dados atuais para debug
+            this.dadosAtuais = dados;
+            
+            this.addLog(`📝 ${index + 1}/${this.dados.totalRegistros} - ID: ${idValue} | ${isMaterial ? 'MATERIAL' : 'SERVIÇO'}`, 'info', { id: idValue, classe, isMaterial });
             
             if (!idValue) {
+                this.addLog(`❌ Registro ${index + 1} sem ID! Pulando...`, 'error', dados);
                 this.dados.adicionarResultado('N/A', 'pulado', 'ID vazio', dados);
                 return { sucesso: false, erro: 'ID vazio', pulado: true };
             }
             
+            // Extrai dados
             const prancha = dados['PRANCHA'] || '';
             const maraCode = dados['MARACODE'] || '';
             const qtdServico = dados['QTD SERVICO EXECUTADO'] || '';
@@ -984,43 +1004,65 @@
             const qtdMaterial = dados['QTD MATERIAL'] || '';
             const localObra = dados['LOCAL EXECUCAO OBRA'] || '';
             
+            this.addLog(`📋 Dados extraídos: Prancha="${prancha}", MaraCode="${maraCode}", QtdServico="${qtdServico}"`, 'info', {
+                prancha,
+                maraCode,
+                qtdServico,
+                pesquisaMaterial,
+                qtdMaterial,
+                localObra
+            });
+            
             try {
                 // PASSO 1: COLLAPSE
+                this.addLog(`🔍 PASSO 1: Abrindo menu...`, 'info');
                 const menuElement = await this.waitForElement('//span[@id="ott-sidebar-collapse"]', 3000);
                 if (!await this.clickElement(menuElement, 'Menu')) {
+                    this.addLog(`❌ Menu não encontrado!`, 'error');
                     this.dados.adicionarResultado(idValue, 'erro', 'Menu não encontrado', dados);
                     return { sucesso: false };
                 }
                 await this.wait(200);
                 
                 // PASSO 2: LISTA REQUISIÇÕES
+                this.addLog(`🔍 PASSO 2: Navegando para Lista Requisições EPS...`, 'info');
                 const listaElement = await this.waitForElement('//a[@routerlink="/requisicoes-eps"]', 3000);
                 if (!await this.clickElement(listaElement, 'Lista EPS')) {
+                    this.addLog(`❌ Lista Requisições EPS não encontrada!`, 'error');
                     this.dados.adicionarResultado(idValue, 'erro', 'Lista não encontrada', dados);
                     return { sucesso: false };
                 }
                 await this.wait(CONFIG.delayAposNavegacao);
                 
                 // PASSO 3: ID
+                this.addLog(`🔍 PASSO 3: Preenchendo ID ${idValue}...`, 'info', { id: idValue });
                 const inputId = await this.waitForIdField();
                 if (!inputId) {
                     const fallback = document.querySelector('#filtroId');
-                    if (fallback) await this.preencherId(fallback, idValue);
-                    else {
+                    if (fallback) {
+                        await this.preencherId(fallback, idValue);
+                        this.addLog(`✅ ID ${idValue} preenchido (fallback)`, 'success');
+                    } else {
+                        this.addLog(`❌ Campo ID não encontrado!`, 'error');
                         this.dados.adicionarResultado(idValue, 'erro', 'Campo ID não encontrado', dados);
                         return { sucesso: false };
                     }
                 } else {
                     await this.preencherId(inputId, idValue);
+                    this.addLog(`✅ ID ${idValue} preenchido`, 'success');
                 }
                 
                 // PASSO 4: BUSCAR
+                this.addLog(`🔍 PASSO 4: Buscando requisição...`, 'info');
                 const btnBuscar = await this.waitForElement('//a[contains(@class, "btn-primary") and contains(text(), "Buscar")]', 3000);
-                if (btnBuscar) await this.clickElement(btnBuscar, 'Buscar');
-                else {
+                if (btnBuscar) {
+                    await this.clickElement(btnBuscar, 'Buscar');
+                } else {
                     const btnCSS = document.querySelector('.btn-primary.btn-sm.btn-block');
-                    if (btnCSS) await this.clickElement(btnCSS, 'Buscar');
-                    else {
+                    if (btnCSS) {
+                        await this.clickElement(btnCSS, 'Buscar');
+                    } else {
+                        this.addLog(`❌ Botão Buscar não encontrado!`, 'error');
                         this.dados.adicionarResultado(idValue, 'erro', 'Botão Buscar não encontrado', dados);
                         return { sucesso: false };
                     }
@@ -1028,11 +1070,15 @@
                 await this.wait(CONFIG.delayAposBusca);
                 
                 // PASSO 5: EDITAR
+                this.addLog(`🔍 PASSO 5: Verificando botão Editar...`, 'info');
                 const btnEditar = await this.waitForElement('//a[contains(@title, "Editar Requisição")]', 3000);
                 if (!btnEditar) {
                     const btnCSS = document.querySelector('a[title="Editar Requisição"]');
-                    if (btnCSS) await this.clickElement(btnCSS, 'Editar');
-                    else {
+                    if (btnCSS) {
+                        await this.clickElement(btnCSS, 'Editar');
+                        this.addLog(`✅ Botão Editar encontrado (CSS)`, 'success');
+                    } else {
+                        this.addLog(`⚠️ ID ${idValue} sem botão Editar! Pulando...`, 'warning', { id: idValue });
                         this.dados.adicionarResultado(idValue, 'pulado', 'Sem botão Editar', dados);
                         return { sucesso: false, pulado: true };
                     }
@@ -1041,11 +1087,14 @@
                 }
                 
                 // PASSO 6: SERVIÇOS
+                this.addLog(`🔍 PASSO 6: Acessando serviços...`, 'info');
                 const btnServico = await this.waitForElement('//a[contains(@title, "Serviços")]', 3000);
                 if (!btnServico) {
                     const btnCSS = document.querySelector('a[title="Serviços"]');
-                    if (btnCSS) await this.clickElement(btnCSS, 'Serviços');
-                    else {
+                    if (btnCSS) {
+                        await this.clickElement(btnCSS, 'Serviços');
+                    } else {
+                        this.addLog(`❌ Botão Serviços não encontrado!`, 'error');
                         this.dados.adicionarResultado(idValue, 'erro', 'Serviços não encontrado', dados);
                         return { sucesso: false };
                     }
@@ -1054,6 +1103,7 @@
                 }
                 
                 // PASSO 7: ABA MEDIÇÃO
+                this.addLog(`🔍 PASSO 7: Abrindo Medição de Campo...`, 'info');
                 const abaMedicao = await this.waitForElement('//a[@role="tab" and contains(text(), "Medição de Campo")]', 3000);
                 if (!abaMedicao) {
                     const abas = document.querySelectorAll('a[role="tab"]');
@@ -1064,8 +1114,11 @@
                             break;
                         }
                     }
-                    if (encontrada) await this.clickElement(encontrada, 'Aba Medição');
-                    else {
+                    if (encontrada) {
+                        await this.clickElement(encontrada, 'Aba Medição');
+                        this.addLog(`✅ Aba Medição encontrada (texto)`, 'success');
+                    } else {
+                        this.addLog(`❌ Aba Medição de Campo não encontrada!`, 'error');
                         this.dados.adicionarResultado(idValue, 'erro', 'Aba não encontrada', dados);
                         return { sucesso: false };
                     }
@@ -1074,6 +1127,7 @@
                 }
                 
                 // PASSO 8: INSERIR MEDIÇÃO
+                this.addLog(`🔍 PASSO 8: Inserindo medição...`, 'info');
                 const btnInserir = await this.waitForElement('//button[contains(text(), "Inserir Medição de Campo")]', 3000);
                 if (!btnInserir) {
                     const botoes = document.querySelectorAll('button');
@@ -1084,8 +1138,11 @@
                             break;
                         }
                     }
-                    if (encontrado) await this.clickElement(encontrado, 'Inserir');
-                    else {
+                    if (encontrado) {
+                        await this.clickElement(encontrado, 'Inserir');
+                        this.addLog(`✅ Botão Inserir encontrado (texto)`, 'success');
+                    } else {
+                        this.addLog(`❌ Botão Inserir Medição não encontrado!`, 'error');
                         this.dados.adicionarResultado(idValue, 'erro', 'Inserir não encontrado', dados);
                         return { sucesso: false };
                     }
@@ -1096,16 +1153,21 @@
                 await this.wait(500);
                 
                 // ===== PREENCHER FORMULÁRIO =====
+                this.addLog(`✏️ Preenchendo formulário...`, 'info');
+                
                 // 1. PRANCHA
+                this.addLog(`📝 Preenchendo Prancha: "${prancha}"`, 'info');
                 const inputPrancha = await this.waitForElement(CONFIG.xpaths.inputPrancha, 3000);
                 await this.preencherCampo(inputPrancha, prancha, 'Prancha');
                 
                 // 2. CLASSE
+                this.addLog(`📝 Preenchendo Classe: "${classe}"`, 'info');
                 const selectClasse = await this.waitForElement(CONFIG.xpaths.selectClasse, 3000);
                 await this.preencherCampo(selectClasse, classe, 'Classe');
                 
                 // 3. MARACODE
                 if (maraCode) {
+                    this.addLog(`📝 Preenchendo MaraCode: "${maraCode}"`, 'info');
                     const inputMaraCode = await this.encontrarMaraCode();
                     if (inputMaraCode) {
                         inputMaraCode.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1128,9 +1190,12 @@
                         }
                         await this.aguardarExpansaoFormulario(classe);
                     }
+                } else {
+                    this.addLog(`⏭️ MaraCode vazio, pulando...`, 'info');
                 }
                 
                 // 4. QTD SERVIÇO EXECUTADO
+                this.addLog(`📝 Preenchendo Qtd Serviço: "${qtdServico}"`, 'info');
                 const inputQtdServico = await this.waitForElement(CONFIG.xpaths.inputQtdServico, 3000);
                 if (inputQtdServico) {
                     await this.preencherQtdServico(inputQtdServico, qtdServico, 'Qtd Serviço');
@@ -1138,32 +1203,48 @@
                 
                 // 5. PESQUISA MATERIAL
                 if (isMaterial && pesquisaMaterial) {
+                    this.addLog(`📝 Preenchendo Pesquisa Material: "${pesquisaMaterial}"`, 'info');
                     const inputPesquisa = await this.encontrarPesquisaMaterial();
                     if (inputPesquisa) {
                         await this.preencherPesquisaMaterial(inputPesquisa, pesquisaMaterial, 'Pesquisa Material');
+                    } else {
+                        this.addLog(`⚠️ Pesquisa Material não encontrado!`, 'warning');
                     }
+                } else if (isMaterial) {
+                    this.addLog(`⚠️ MATERIAL sem Pesquisa Material!`, 'warning', { id: idValue, classe });
                 }
                 
                 // 6. QTD MATERIAL
-                const inputQtdMaterial = await this.waitForElement(CONFIG.xpaths.inputQtdMaterial, 3000);
-                if (inputQtdMaterial && isMaterial) {
-                    if (qtdMaterial && !qtdMaterial.includes('-') && String(qtdMaterial) !== String(idValue)) {
-                        const valorConvertido = this.converterNumero(qtdMaterial);
-                        this.addLog(`📦 Qtd Material: "${valorConvertido}"`, 'info');
-                        await this.preencherCampo(inputQtdMaterial, valorConvertido, 'Qtd Material');
+                if (isMaterial) {
+                    this.addLog(`📝 Preenchendo Qtd Material: "${qtdMaterial}"`, 'info');
+                    const inputQtdMaterial = await this.waitForElement(CONFIG.xpaths.inputQtdMaterial, 3000);
+                    if (inputQtdMaterial) {
+                        if (qtdMaterial && !qtdMaterial.includes('-') && String(qtdMaterial) !== String(idValue)) {
+                            const valorConvertido = this.converterNumero(qtdMaterial);
+                            await this.preencherCampo(inputQtdMaterial, valorConvertido, 'Qtd Material');
+                        } else {
+                            this.addLog(`⏭️ Qtd Material ignorado (vazio, código ou igual ao ID)`, 'info');
+                        }
                     }
                 }
                 
                 // 7. LOCAL EXECUÇÃO OBRA
                 if (localObra) {
+                    this.addLog(`📝 Preenchendo Local Obra: "${localObra}"`, 'info');
                     const inputLocalObra = await this.encontrarLocalObra();
                     if (inputLocalObra) {
                         await this.preencherLocalObraEspecifico(inputLocalObra, localObra, 'Local Obra');
+                    } else {
+                        this.addLog(`⚠️ Local Obra não encontrado!`, 'warning');
                     }
+                } else {
+                    this.addLog(`⏭️ Local Obra vazio, pulando...`, 'info');
                 }
                 
                 // ===== SALVAR =====
                 if (!CONFIG.modoTeste) {
+                    this.addLog(`💾 Salvando ID ${idValue}...`, 'info');
+                    
                     let btnSalvar = document.querySelector('button.btn.btn-primary.mt-4.float-right');
                     if (!btnSalvar) btnSalvar = document.querySelector('button[type="submit"].btn-primary.float-right');
                     if (!btnSalvar) {
@@ -1180,20 +1261,19 @@
                         btnSalvar.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         await this.wait(200);
                         btnSalvar.click();
-                        this.addLog(`💾 Salvando ${idValue}...`, 'info');
                         await this.wait(CONFIG.delayAposSalvar);
                         
                         const resultado = this.verificarMensagemRetorno();
                         
                         if (resultado && resultado.status === 'sucesso') {
+                            this.addLog(`✅ ID ${idValue} cadastrado com SUCESSO!`, 'success', { id: idValue, mensagem: resultado.mensagem });
                             this.dados.adicionarResultado(idValue, 'sucesso', resultado.mensagem, dados);
-                            this.addLog(`✅ ${idValue} OK!`, 'success');
                         } else if (resultado && resultado.status === 'erro') {
+                            this.addLog(`❌ ID ${idValue} falhou: ${resultado.mensagem}`, 'error', { id: idValue, erro: resultado.mensagem, dados });
                             this.dados.adicionarResultado(idValue, 'erro', resultado.mensagem, dados, resultado.mensagem);
-                            this.addLog(`❌ ${idValue} falhou: ${resultado.mensagem}`, 'error');
                         } else {
-                            this.dados.adicionarResultado(idValue, 'sucesso', 'Cadastro realizado', dados);
-                            this.addLog(`✅ ${idValue} OK!`, 'success');
+                            this.addLog(`✅ ID ${idValue} cadastrado (sem confirmação)`, 'success', { id: idValue });
+                            this.dados.adicionarResultado(idValue, 'sucesso', 'Cadastro realizado (sem confirmação)', dados);
                         }
                         
                         // FECHAR
@@ -1214,12 +1294,13 @@
                             await this.wait(CONFIG.delayAposFechar);
                         }
                     } else {
+                        this.addLog(`❌ Botão Salvar não encontrado!`, 'error');
                         this.dados.adicionarResultado(idValue, 'erro', 'Botão Salvar não encontrado', dados);
                         return { sucesso: false };
                     }
                 } else {
-                    this.addLog(`🧪 TESTE: ${idValue} simulado`, 'success');
-                    this.dados.adicionarResultado(idValue, 'sucesso', 'TESTE', dados);
+                    this.addLog(`🧪 TESTE: ID ${idValue} simulado com sucesso`, 'success', { id: idValue });
+                    this.dados.adicionarResultado(idValue, 'sucesso', 'TESTE - Cadastro simulado', dados);
                     await this.wait(1000);
                 }
                 
@@ -1227,7 +1308,7 @@
                 
             } catch (error) {
                 const erroMsg = error.message || 'Erro desconhecido';
-                this.addLog(`❌ ${idValue}: ${erroMsg}`, 'error');
+                this.addLog(`❌ ID ${idValue}: ${erroMsg}`, 'error', { id: idValue, erro: erroMsg, dados });
                 this.dados.adicionarResultado(idValue, 'erro', erroMsg, dados, erroMsg);
                 return { sucesso: false };
             }
@@ -1239,7 +1320,7 @@
                 return;
             }
             if (this.dados.totalRegistros === 0) {
-                this.addLog('⚠️ Nenhum dado!', 'error');
+                this.addLog('⚠️ Nenhum dado para cadastrar!', 'error');
                 return;
             }
             
@@ -1249,22 +1330,38 @@
             this.dados.relatorio = [];
             this.dados.contadores = { sucessos: 0, erros: 0, pulados: 0 };
             
-            this.addLog(`🚀 Iniciando ${this.dados.totalRegistros} cadastros (RÁPIDO)`, 'info');
+            this.addLog(`🚀 === INICIANDO AUTOMAÇÃO ===`, 'info');
+            this.addLog(`📋 Total de registros: ${this.dados.totalRegistros}`, 'info');
+            this.addLog(`📋 Modo: ${CONFIG.modoTeste ? 'TESTE' : 'PRODUÇÃO'}`, 'info');
             
             const logContainer = document.getElementById('auto-log');
             if (logContainer) logContainer.innerHTML = '';
             
+            let linhaAtual = 0;
+            
             for (let i = 0; i < this.dados.totalRegistros; i++) {
                 if (this.podeParar) {
-                    this.addLog('⏹️ Interrompido', 'warning');
+                    this.addLog('⏹️ Interrompido pelo usuário', 'warning');
                     break;
                 }
                 
+                linhaAtual = i + 1;
                 const dados = this.dados.registros[i];
-                await this.executarCadastro(dados, i);
+                const idExibicao = dados['ID'] || dados['id'] || dados['Id'] || i + 1;
+                const classe = dados['CLASSE'] || dados['Classe'] || 'SEM CLASSE';
+                
+                this.addLog(`📌 === LINHA ${linhaAtual}/${this.dados.totalRegistros} - ID: ${idExibicao} | Classe: ${classe} ===`, 'info');
+                this.atualizarProgresso(linhaAtual, this.dados.totalRegistros);
+                
+                try {
+                    await this.executarCadastro(dados, i);
+                } catch (error) {
+                    this.addLog(`❌ Erro na linha ${linhaAtual}: ${error.message}`, 'error', { linha: linhaAtual, erro: error.message, dados });
+                    this.dados.adicionarResultado(idExibicao, 'erro', error.message, dados, error.message);
+                }
                 
                 if (i < this.dados.totalRegistros - 1 && !this.podeParar) {
-                    this.atualizarProgresso(i + 1, this.dados.totalRegistros);
+                    this.addLog(`⏳ Aguardando ${CONFIG.delayEntreCadastros}ms...`, 'info');
                     await this.wait(CONFIG.delayEntreCadastros);
                 }
             }
@@ -1273,8 +1370,22 @@
             
             this.atualizarProgresso(this.dados.totalRegistros, this.dados.totalRegistros);
             
-            this.addLog(`✅ Finalizado! ${this.dados.contadores.sucessos} OK, ${this.dados.contadores.erros} ERRO, ${this.dados.contadores.pulados} PULADO`, 'success');
-            this.addLog(`📊 Relatório: ${this.dados.relatorio.length} registros`, 'info');
+            const sucessos = this.dados.contadores.sucessos;
+            const erros = this.dados.contadores.erros;
+            const pulados = this.dados.contadores.pulados;
+            
+            this.addLog(`✅ === AUTOMAÇÃO FINALIZADA ===`, 'success');
+            this.addLog(`📊 Resultado: ${sucessos} SUCESSOS, ${erros} ERROS, ${pulados} PULADOS`, 'info');
+            this.addLog(`📊 Relatório gerado com ${this.dados.relatorio.length} registros`, 'info');
+            
+            // Log detalhado dos erros
+            if (erros > 0) {
+                this.addLog(`🔍 Detalhes dos ERROS:`, 'error');
+                const errosList = this.dados.relatorio.filter(r => r.status === 'erro');
+                errosList.forEach((item, idx) => {
+                    this.addLog(`  ${idx + 1}. ID ${item.id}: ${item.erro || item.mensagem}`, 'error', item.dados);
+                });
+            }
             
             document.getElementById('popup-btn-iniciar').disabled = false;
             document.getElementById('popup-btn-parar').disabled = true;
@@ -1334,6 +1445,7 @@
                     <div><div style="font-size: 24px; font-weight: 600; color: #ffc107;">${pulados}</div><div style="font-size: 11px; color: #6c757d;">⏭️ Pulados</div></div>
                     <div><div style="font-size: 24px; font-weight: 600; color: #17a2b8;">${total}</div><div style="font-size: 11px; color: #6c757d;">📊 Total</div></div>
                 </div>
+                ${erros > 0 ? `<div style="font-size: 12px; color: #dc3545; margin-bottom: 12px;">⚠️ ${erros} erro(s) encontrado(s). Verifique o relatório.</div>` : ''}
                 <div style="display: flex; gap: 10px; justify-content: center;">
                     <button id="btn-alerta-fechar" style="padding: 6px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;">Fechar</button>
                     <button id="btn-alerta-relatorio" style="padding: 6px 20px; background: #17a2b8; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;">📊 Relatório</button>
@@ -1497,7 +1609,7 @@
                     </div>
                 </div>
                 
-                <div id="auto-log" style="flex:1;overflow-y:auto;font-size:10px;background:#f8f9fa;border-radius:4px;padding:4px;margin-bottom:8px;min-height:60px;max-height:120px;font-family:monospace;border:1px solid #e9ecef;">
+                <div id="auto-log" style="flex:1;overflow-y:auto;font-size:10px;background:#f8f9fa;border-radius:4px;padding:4px;margin-bottom:8px;min-height:80px;max-height:150px;font-family:monospace;border:1px solid #e9ecef;">
                     <div style="color:#6c757d;">Aguardando início...</div>
                 </div>
                 
@@ -1644,7 +1756,9 @@
             });
             
             document.getElementById('popup-btn-exportar-log').addEventListener('click', () => {
-                const logText = self.log.map(entry => `[${entry.timestamp}] ${entry.mensagem}`).join('\n');
+                const logText = self.log.map(entry => 
+                    `[${entry.timestamp}] ${entry.mensagem}${entry.dados ? ' | ' + entry.dados : ''}`
+                ).join('\n');
                 const blob = new Blob([logText], { type: 'text/plain;charset=utf-8' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -1754,7 +1868,7 @@
         });
         observer.observe(document.body, { childList: true, subtree: true });
         
-        console.log('⚡ Automação OTIMIZADA inicializada!');
+        console.log('⚡ Automação com LOGS DETALHADOS inicializada!');
     }
     
     // ===== ESCUTA MENSAGENS =====
