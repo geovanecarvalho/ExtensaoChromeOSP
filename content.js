@@ -6,6 +6,7 @@
     'use strict';
     
     console.log('🤖 Automação de Serviços/Materiais carregada!');
+    console.log('📋 Versão com mapeamento CORRIGIDO');
     
     // ===== CONFIGURAÇÕES =====
     const CONFIG = {
@@ -30,1761 +31,1953 @@
         },
         
         delayEntreCadastros: 3000,
-        delayPreenchimento: 200,
-        delayAposBusca: 1500,
+        delayPreenchimento: 300,
+        delayAposBusca: 2000,
         delayAposClick: 500,
-        delayAposNavegacao: 1500,
+        delayAposNavegacao: 2000,
         delayAposSalvar: 3000,
         delayAposEnter: 800,
         delayAposFechar: 500,
         delayExpansaoFormulario: 3000,
+        delayAposPreencher: 500,
         modoTeste: false
     };
     
-    let dadosParaCadastrar = [];
-    let cadastroAtual = 0;
-    let estaExecutando = false;
-    let podeParar = false;
-    let log = [];
-    let popupAberto = false;
-    let relatorio = [];
-    let contadores = { sucessos: 0, erros: 0, pulados: 0 };
-    
-    // ===== FUNÇÕES AUXILIARES =====
-    
-    function wait(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
+    // ============================================
+    // CLASSE DADOS_CADASTRO
+    // ============================================
+    class DadosCadastro {
+        constructor() {
+            this.registros = [];
+            this.registroAtual = null;
+            this.indiceAtual = 0;
+            this.totalRegistros = 0;
+            this.relatorio = [];
+            this.contadores = { sucessos: 0, erros: 0, pulados: 0 };
+            this.log = [];
+            this.executando = false;
+            this.podeParar = false;
+            this.mapeamentoColunas = {};
+        }
+        
+        carregarDados(dados) {
+            this.registros = dados;
+            this.totalRegistros = dados.length;
+            this.indiceAtual = 0;
+            this.relatorio = [];
+            this.contadores = { sucessos: 0, erros: 0, pulados: 0 };
+            console.log(`📊 ${this.totalRegistros} registros carregados`);
+            return this;
+        }
+        
+        proximoRegistro() {
+            if (this.indiceAtual < this.totalRegistros) {
+                this.registroAtual = this.registros[this.indiceAtual];
+                this.indiceAtual++;
+                return this.registroAtual;
+            }
+            return null;
+        }
+        
+        getRegistroAtual() {
+            return this.registroAtual;
+        }
+        
+        adicionarResultado(id, status, mensagem, dados, erro = null) {
+            this.relatorio.push({
+                id: id || 'N/A',
+                status: status || 'erro',
+                mensagem: mensagem || '',
+                dados: dados || {},
+                erro: erro || null
+            });
+            
+            if (status === 'sucesso') this.contadores.sucessos++;
+            else if (status === 'erro') this.contadores.erros++;
+            else if (status === 'pulado') this.contadores.pulados++;
+        }
+        
+        gerarRelatorio() {
+            if (this.relatorio.length === 0) {
+                return '⚠️ Nenhum dado para gerar relatório';
+            }
+            
+            let texto = '========================================\n';
+            texto += 'RELATÓRIO DE CADASTRO DE SERVIÇOS/MATERIAIS\n';
+            texto += `Data: ${new Date().toLocaleString()}\n`;
+            texto += `Total de registros: ${this.relatorio.length}\n`;
+            texto += '========================================\n\n';
+            texto += `✅ Sucessos: ${this.contadores.sucessos}\n`;
+            texto += `❌ Erros: ${this.contadores.erros}\n`;
+            texto += `⏭️ Pulados: ${this.contadores.pulados}\n`;
+            texto += `📊 Total: ${this.relatorio.length}\n`;
+            texto += '========================================\n\n';
+            texto += 'DETALHES DOS REGISTROS:\n';
+            texto += '----------------------------------------\n';
+            
+            this.relatorio.forEach((item, index) => {
+                const statusEmoji = item.status === 'sucesso' ? '✅' : 
+                                   item.status === 'erro' ? '❌' : '⏭️';
+                const statusLabel = item.status.toUpperCase();
+                texto += `${index + 1}. ID: ${item.id} - ${statusEmoji} ${statusLabel}\n`;
+                if (item.mensagem) {
+                    texto += `   Mensagem: ${item.mensagem}\n`;
+                }
+                if (item.erro) {
+                    texto += `   Erro: ${item.erro}\n`;
+                }
+                texto += `   Dados: ${JSON.stringify(item.dados)}\n`;
+                texto += '----------------------------------------\n';
+            });
+            
+            texto += '\n========================================\n';
+            texto += 'FIM DO RELATÓRIO\n';
+            texto += '========================================\n';
+            return texto;
+        }
     }
     
-    function waitForElement(selector, timeout = 10000) {
-        return new Promise((resolve) => {
-            const startTime = Date.now();
+    // ============================================
+    // CLASSE PROCESSADOR_CSV - CORRIGIDA
+    // ============================================
+    class ProcessadorCSV {
+        constructor() {
+            this.dados = null;
+            this.headers = [];
+            this.mapeamento = {};
+        }
+        
+        processar(texto) {
+            console.log('📄 Processando CSV...');
             
-            function findElement() {
-                let element = null;
+            if (texto.startsWith('\uFEFF')) {
+                texto = texto.substring(1);
+            }
+            
+            let delimitador = ',';
+            const primeiraLinha = texto.split('\n')[0];
+            if (primeiraLinha.includes(';') && !primeiraLinha.includes(',')) {
+                delimitador = ';';
+            } else if (primeiraLinha.includes('\t')) {
+                delimitador = '\t';
+            }
+            
+            console.log(`📋 Delimitador: "${delimitador}"`);
+            
+            const linhas = texto.split(/\r?\n/).filter(line => line.trim() !== '');
+            if (linhas.length === 0) {
+                throw new Error('Arquivo CSV vazio');
+            }
+            
+            this.headers = linhas[0].split(delimitador).map(h => h.trim().replace(/^"|"$/g, ''));
+            console.log(`📋 Cabeçalhos: ${this.headers.join(', ')}`);
+            
+            this.dados = [];
+            for (let i = 1; i < linhas.length; i++) {
+                const valores = linhas[i].split(delimitador).map(v => v.trim().replace(/^"|"$/g, ''));
+                const linha = {};
+                this.headers.forEach((header, index) => {
+                    linha[header] = valores[index] || '';
+                });
+                this.dados.push(linha);
+            }
+            
+            console.log(`📊 ${this.dados.length} linhas processadas`);
+            return this.dados;
+        }
+        
+        // ===== MAPEAMENTO CORRIGIDO =====
+        mapearColunas() {
+            const mapeamento = {};
+            
+            // MAPEAMENTO EXPLÍCITO POR POSIÇÃO
+            // Posição 0: ID
+            // Posição 1: PRANCHA
+            // Posição 2: CLASSE
+            // Posição 3: MARACODE
+            // Posição 4: QTD SERVICO EXECUTADO
+            // Posição 5: PESQUISA MATERIAL
+            // Posição 6: QTD MATERIAL
+            // Posição 7: LOCAL EXECUCAO OBRA
+            
+            console.log('📋 Mapeando colunas por posição...');
+            
+            // Primeiro: mapeia pela posição exata
+            const posicoes = {
+                'ID': 0,
+                'PRANCHA': 1,
+                'CLASSE': 2,
+                'MARACODE': 3,
+                'QTD SERVICO EXECUTADO': 4,
+                'PESQUISA MATERIAL': 5,
+                'QTD MATERIAL': 6,
+                'LOCAL EXECUCAO OBRA': 7
+            };
+            
+            for (const [campo, posicao] of Object.entries(posicoes)) {
+                if (this.headers[posicao]) {
+                    mapeamento[campo] = this.headers[posicao];
+                    console.log(`✅ Mapeou "${campo}" -> coluna "${this.headers[posicao]}" (posição ${posicao})`);
+                }
+            }
+            
+            // Segundo: verifica se os nomes estão corretos e ajusta se necessário
+            const verificarNome = (campo, header) => {
+                const campoLower = campo.toLowerCase();
+                const headerLower = header.toLowerCase();
                 
+                // Se o header contém o nome do campo ou vice-versa
+                if (headerLower.includes(campoLower) || campoLower.includes(headerLower)) {
+                    return true;
+                }
+                return false;
+            };
+            
+            // Verifica cada mapeamento
+            for (const [campo, header] of Object.entries(mapeamento)) {
+                if (!verificarNome(campo, header)) {
+                    console.log(`⚠️ Atenção: "${campo}" está mapeado para coluna "${header}" que não parece corresponder`);
+                    
+                    // Tenta encontrar um header melhor
+                    for (const h of this.headers) {
+                        if (verificarNome(campo, h)) {
+                            mapeamento[campo] = h;
+                            console.log(`✅ Corrigiu "${campo}" -> coluna "${h}"`);
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // ===== CORREÇÃO ESPECÍFICA: Se QTD SERVICO EXECUTADO está vazio =====
+            // Verifica se os dados estão sendo lidos corretamente
+            if (this.dados && this.dados.length > 0) {
+                const primeiroRegistro = this.dados[0];
+                const headerQtdServico = mapeamento['QTD SERVICO EXECUTADO'];
+                const headerPesquisaMaterial = mapeamento['PESQUISA MATERIAL'];
+                
+                if (headerQtdServico && primeiroRegistro[headerQtdServico] === '') {
+                    console.log('⚠️ QTD SERVICO EXECUTADO está vazio, verificando mapeamento...');
+                    
+                    // Tenta encontrar a coluna correta
+                    for (const h of this.headers) {
+                        if (primeiroRegistro[h] && primeiroRegistro[h].match(/[\d,]+/)) {
+                            // Se o valor contém números, provavelmente é QTD SERVICO
+                            if (!mapeamento['QTD SERVICO EXECUTADO'] || mapeamento['QTD SERVICO EXECUTADO'] === '') {
+                                mapeamento['QTD SERVICO EXECUTADO'] = h;
+                                console.log(`✅ Mapeou "QTD SERVICO EXECUTADO" -> coluna "${h}" (por valor numérico)`);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            this.mapeamento = mapeamento;
+            console.log(`📊 Mapeamento final: ${JSON.stringify(mapeamento, null, 2)}`);
+            return mapeamento;
+        }
+        
+        getDadosMapeados() {
+            if (!this.dados || !this.mapeamento) {
+                throw new Error('Dados não processados ou mapeamento não realizado');
+            }
+            
+            return this.dados.map(row => {
+                const novoRow = {};
+                for (const [campo, coluna] of Object.entries(this.mapeamento)) {
+                    novoRow[campo] = row[coluna] || '';
+                }
+                return novoRow;
+            });
+        }
+    }
+    
+    // ============================================
+    // CLASSE AUTOMACAO
+    // ============================================
+    class Automacao {
+        constructor() {
+            this.dados = new DadosCadastro();
+            this.processador = new ProcessadorCSV();
+            this.estaExecutando = false;
+            this.podeParar = false;
+            this.log = [];
+            this.popupAberto = false;
+            this.fileInput = null;
+        }
+        
+        // ===== FUNÇÕES AUXILIARES =====
+        
+        wait(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+        
+        waitForElement(selector, timeout = 10000) {
+            return new Promise((resolve) => {
+                const startTime = Date.now();
+                
+                function findElement() {
+                    let element = null;
+                    
+                    try {
+                        const result = document.evaluate(
+                            selector,
+                            document,
+                            null,
+                            XPathResult.FIRST_ORDERED_NODE_TYPE,
+                            null
+                        );
+                        element = result.singleNodeValue;
+                    } catch (e) {}
+                    
+                    if (!element && !selector.startsWith('//')) {
+                        try {
+                            element = document.querySelector(selector);
+                        } catch (e) {}
+                    }
+                    
+                    if (element && element.offsetParent !== null && element.offsetWidth > 0) {
+                        resolve(element);
+                        return;
+                    }
+                    
+                    if (Date.now() - startTime > timeout) {
+                        resolve(null);
+                        return;
+                    }
+                    
+                    setTimeout(findElement, 300);
+                }
+                
+                findElement();
+            });
+        }
+        
+        async waitForIdField() {
+            let tentativas = 0;
+            const maxTentativas = 20;
+            
+            while (tentativas < maxTentativas) {
+                let inputId = null;
                 try {
                     const result = document.evaluate(
-                        selector,
+                        '//input[@id="filtroId"]',
                         document,
                         null,
                         XPathResult.FIRST_ORDERED_NODE_TYPE,
                         null
                     );
-                    element = result.singleNodeValue;
+                    inputId = result.singleNodeValue;
                 } catch (e) {}
                 
-                if (!element && !selector.startsWith('//')) {
-                    try {
-                        element = document.querySelector(selector);
-                    } catch (e) {}
+                if (!inputId) {
+                    inputId = document.querySelector('#filtroId');
                 }
                 
-                if (element && element.offsetParent !== null && element.offsetWidth > 0) {
-                    resolve(element);
-                    return;
+                if (inputId) {
+                    const isVisible = inputId.offsetParent !== null && inputId.offsetWidth > 0;
+                    if (isVisible) {
+                        return inputId;
+                    }
                 }
                 
-                if (Date.now() - startTime > timeout) {
-                    resolve(null);
-                    return;
-                }
-                
-                setTimeout(findElement, 200);
+                tentativas++;
+                await this.wait(500);
             }
             
-            findElement();
-        });
-    }
-    
-    async function waitForIdField() {
-        let tentativas = 0;
-        const maxTentativas = 20;
+            return null;
+        }
         
-        while (tentativas < maxTentativas) {
-            let inputId = null;
+        async clickElement(element, descricao = '') {
+            if (!element) {
+                this.addLog(`❌ Elemento não encontrado: ${descricao}`, 'error');
+                return false;
+            }
+            try {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                await this.wait(500);
+                
+                try {
+                    element.click();
+                } catch (e) {
+                    const event = new MouseEvent('click', {
+                        view: window,
+                        bubbles: true,
+                        cancelable: true
+                    });
+                    element.dispatchEvent(event);
+                }
+                
+                this.addLog(`✅ Clicou em: ${descricao}`, 'success');
+                await this.wait(CONFIG.delayAposClick);
+                return true;
+            } catch (e) {
+                this.addLog(`❌ Erro ao clicar em ${descricao}: ${e.message}`, 'error');
+                return false;
+            }
+        }
+        
+        converterNumero(valor) {
+            if (valor === undefined || valor === null || valor === '') {
+                return '';
+            }
+            let numeroStr = String(valor).trim().replace(/\s/g, '');
+            if (numeroStr.includes('.') && numeroStr.includes(',')) {
+                numeroStr = numeroStr.replace(/\./g, '');
+                numeroStr = numeroStr.replace(',', '.');
+            } else if (numeroStr.includes(',')) {
+                numeroStr = numeroStr.replace(',', '.');
+            }
+            const numero = parseFloat(numeroStr);
+            if (!isNaN(numero) && numeroStr !== '') {
+                return numero.toString();
+            }
+            return valor;
+        }
+        
+        async preencherCampo(elemento, valor, descricao = '') {
+            if (!elemento) {
+                this.addLog(`⚠️ Campo não encontrado: ${descricao}`, 'warning');
+                return false;
+            }
+            if (valor === undefined || valor === null || valor === '') {
+                this.addLog(`⏭️ Campo vazio: ${descricao}`, 'info');
+                return true;
+            }
+            try {
+                elemento.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                await this.wait(300);
+                
+                if (elemento.tagName === 'SELECT') {
+                    const valorStr = String(valor).trim();
+                    let encontrado = false;
+                    for (let i = 0; i < elemento.options.length; i++) {
+                        const option = elemento.options[i];
+                        if (option.text.includes(valorStr) || option.value === valorStr) {
+                            elemento.selectedIndex = i;
+                            encontrado = true;
+                            break;
+                        }
+                    }
+                    if (!encontrado && valorStr) {
+                        const newOption = document.createElement('option');
+                        newOption.value = valorStr;
+                        newOption.text = valorStr;
+                        elemento.appendChild(newOption);
+                        elemento.value = valorStr;
+                        encontrado = true;
+                    }
+                    if (encontrado) {
+                        const event = new Event('change', { bubbles: true });
+                        elemento.dispatchEvent(event);
+                        this.addLog(`✅ Preencheu select: ${descricao} = ${valor}`, 'success');
+                        return true;
+                    }
+                    return false;
+                } else if (elemento.tagName === 'INPUT' || elemento.tagName === 'TEXTAREA') {
+                    let valorFinal = valor;
+                    if (descricao.includes('Qtd') || descricao.includes('Quantidade')) {
+                        valorFinal = this.converterNumero(valor);
+                    }
+                    
+                    elemento.value = '';
+                    elemento.focus();
+                    await this.wait(200);
+                    elemento.value = String(valorFinal);
+                    const event = new Event('input', { bubbles: true });
+                    elemento.dispatchEvent(event);
+                    elemento.blur();
+                    await this.wait(200);
+                    ['change', 'blur'].forEach(eventType => {
+                        const event = new Event(eventType, { bubbles: true });
+                        elemento.dispatchEvent(event);
+                    });
+                    this.addLog(`✅ Preencheu campo: ${descricao} = ${valorFinal}`, 'success');
+                    await this.wait(CONFIG.delayAposPreencher);
+                    return true;
+                }
+                return false;
+            } catch (e) {
+                this.addLog(`❌ Erro ao preencher ${descricao}: ${e.message}`, 'error');
+                return false;
+            }
+        }
+        
+        async preencherQtdServico(elemento, valor, descricao = '') {
+            if (!elemento) {
+                this.addLog(`⚠️ Campo não encontrado: ${descricao}`, 'warning');
+                return false;
+            }
+            if (valor === undefined || valor === null || valor === '') {
+                this.addLog(`⏭️ ${descricao} vazio, pulando...`, 'info');
+                return true;
+            }
+            
+            let valorFinal = this.converterNumero(valor);
+            this.addLog(`🔢 Tentando preencher ${descricao} com valor: "${valorFinal}"`, 'info');
+            
+            try {
+                elemento.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                await this.wait(300);
+                
+                elemento.click();
+                await this.wait(200);
+                elemento.focus();
+                await this.wait(200);
+                elemento.value = '';
+                await this.wait(100);
+                elemento.value = String(valorFinal);
+                elemento.dispatchEvent(new Event('input', { bubbles: true }));
+                elemento.dispatchEvent(new Event('change', { bubbles: true }));
+                elemento.blur();
+                await this.wait(200);
+                
+                if (elemento.value === String(valorFinal) || elemento.value.replace(',', '.') === String(valorFinal)) {
+                    this.addLog(`✅ ${descricao} preenchido: ${elemento.value}`, 'success');
+                    await this.wait(CONFIG.delayAposPreencher);
+                    return true;
+                }
+                
+                elemento.value = String(valorFinal);
+                elemento.dispatchEvent(new Event('input', { bubbles: true }));
+                elemento.dispatchEvent(new Event('change', { bubbles: true }));
+                await this.wait(200);
+                
+                if (elemento.value === String(valorFinal) || elemento.value.replace(',', '.') === String(valorFinal)) {
+                    this.addLog(`✅ ${descricao} preenchido (estratégia 2): ${elemento.value}`, 'success');
+                    await this.wait(CONFIG.delayAposPreencher);
+                    return true;
+                }
+                
+                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype, 'value'
+                ).set;
+                nativeInputValueSetter.call(elemento, String(valorFinal));
+                elemento.dispatchEvent(new Event('input', { bubbles: true }));
+                elemento.dispatchEvent(new Event('change', { bubbles: true }));
+                await this.wait(200);
+                
+                if (elemento.value === String(valorFinal) || elemento.value.replace(',', '.') === String(valorFinal)) {
+                    this.addLog(`✅ ${descricao} preenchido (estratégia 3): ${elemento.value}`, 'success');
+                    await this.wait(CONFIG.delayAposPreencher);
+                    return true;
+                }
+                
+                this.addLog(`⚠️ ${descricao} NÃO preenchido. Valor atual: "${elemento.value}"`, 'warning');
+                return false;
+            } catch (e) {
+                this.addLog(`❌ Erro ao preencher ${descricao}: ${e.message}`, 'error');
+                return false;
+            }
+        }
+        
+        async encontrarLocalObra() {
+            this.addLog('🔍 Procurando campo Local Execução Obra...', 'info');
+            
+            await this.wait(1000);
+            
+            let elemento = document.querySelector('#localObra');
+            if (elemento) {
+                const isVisible = elemento.offsetParent !== null && elemento.offsetWidth > 0;
+                if (isVisible) {
+                    this.addLog('✅ Local Obra encontrado por ID (visível)', 'success');
+                    return elemento;
+                }
+            }
+            
             try {
                 const result = document.evaluate(
-                    '//input[@id="filtroId"]',
+                    '//input[@id="localObra"]',
                     document,
                     null,
                     XPathResult.FIRST_ORDERED_NODE_TYPE,
                     null
                 );
-                inputId = result.singleNodeValue;
+                elemento = result.singleNodeValue;
+                if (elemento) {
+                    const isVisible = elemento.offsetParent !== null && elemento.offsetWidth > 0;
+                    if (isVisible) {
+                        this.addLog('✅ Local Obra encontrado por XPATH (visível)', 'success');
+                        return elemento;
+                    }
+                }
             } catch (e) {}
             
-            if (!inputId) {
-                inputId = document.querySelector('#filtroId');
-            }
-            
-            if (inputId) {
-                const isVisible = inputId.offsetParent !== null && inputId.offsetWidth > 0;
+            const inputs = document.querySelectorAll('input[placeholder="Local Obra"]');
+            for (const input of inputs) {
+                const isVisible = input.offsetParent !== null && input.offsetWidth > 0;
                 if (isVisible) {
-                    return inputId;
+                    this.addLog('✅ Local Obra encontrado por placeholder (visível)', 'success');
+                    return input;
                 }
             }
             
-            tentativas++;
-            await wait(300);
+            const inputsByName = document.querySelectorAll('input[formcontrolname="localObra"]');
+            for (const input of inputsByName) {
+                const isVisible = input.offsetParent !== null && input.offsetWidth > 0;
+                if (isVisible) {
+                    this.addLog('✅ Local Obra encontrado por formcontrolname (visível)', 'success');
+                    return input;
+                }
+            }
+            
+            const allInputs = document.querySelectorAll('input');
+            for (const input of allInputs) {
+                if (input.offsetParent !== null && input.offsetWidth > 0) {
+                    if (input.placeholder && input.placeholder.toLowerCase().includes('local')) {
+                        this.addLog(`✅ Local Obra encontrado por busca: "${input.placeholder}"`, 'success');
+                        return input;
+                    }
+                }
+            }
+            
+            this.addLog('❌ Local Obra NÃO encontrado ou NÃO visível!', 'error');
+            return null;
         }
         
-        return null;
-    }
-    
-    async function clickElement(element, descricao = '') {
-        if (!element) {
-            addLog(`❌ Elemento não encontrado: ${descricao}`, 'error');
-            return false;
-        }
-        try {
-            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            await wait(200);
+        async preencherLocalObraEspecifico(elemento, valor, descricao = '') {
+            if (!elemento) {
+                this.addLog(`❌ Campo ${descricao} é nulo`, 'error');
+                return false;
+            }
+            if (valor === undefined || valor === null || valor === '') {
+                this.addLog(`⏭️ ${descricao} vazio, pulando...`, 'info');
+                return true;
+            }
+            
+            this.addLog(`📍 Preenchendo ${descricao} com: "${valor}"`, 'info');
             
             try {
-                element.click();
+                elemento.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                await this.wait(500);
+                
+                elemento.click();
+                await this.wait(300);
+                elemento.focus();
+                await this.wait(300);
+                
+                elemento.value = '';
+                await this.wait(200);
+                elemento.value = String(valor);
+                elemento.dispatchEvent(new Event('input', { bubbles: true }));
+                elemento.dispatchEvent(new Event('change', { bubbles: true }));
+                await this.wait(500);
+                
+                elemento.blur();
+                await this.wait(300);
+                
+                this.addLog(`✅ ${descricao} preenchido: "${elemento.value}"`, 'success');
+                await this.wait(CONFIG.delayAposPreencher);
+                return true;
             } catch (e) {
-                const event = new MouseEvent('click', {
-                    view: window,
+                this.addLog(`❌ Erro ao preencher ${descricao}: ${e.message}`, 'error');
+                return false;
+            }
+        }
+        
+        async preencherId(inputId, valor) {
+            if (!inputId) return false;
+            if (valor === undefined || valor === null || valor === '') return false;
+            inputId.focus();
+            await this.wait(200);
+            inputId.value = '';
+            inputId.value = String(valor);
+            inputId.dispatchEvent(new Event('input', { bubbles: true }));
+            inputId.dispatchEvent(new Event('change', { bubbles: true }));
+            inputId.blur();
+            await this.wait(300);
+            return inputId.value === String(valor);
+        }
+        
+        async pressionarEnter(elemento, descricao = '') {
+            if (!elemento) return false;
+            try {
+                elemento.focus();
+                await this.wait(300);
+                
+                const enterEvent = new KeyboardEvent('keydown', {
+                    key: 'Enter',
+                    code: 'Enter',
+                    keyCode: 13,
+                    which: 13,
                     bubbles: true,
                     cancelable: true
                 });
-                element.dispatchEvent(event);
-            }
-            
-            await wait(CONFIG.delayAposClick);
-            return true;
-        } catch (e) {
-            addLog(`❌ Erro ao clicar em ${descricao}: ${e.message}`, 'error');
-            return false;
-        }
-    }
-    
-    function converterNumero(valor) {
-        if (valor === undefined || valor === null || valor === '') {
-            return '';
-        }
-        let numeroStr = String(valor).trim().replace(/\s/g, '');
-        if (numeroStr.includes('.') && numeroStr.includes(',')) {
-            numeroStr = numeroStr.replace(/\./g, '');
-            numeroStr = numeroStr.replace(',', '.');
-        } else if (numeroStr.includes(',')) {
-            numeroStr = numeroStr.replace(',', '.');
-        }
-        const numero = parseFloat(numeroStr);
-        if (!isNaN(numero) && numeroStr !== '') {
-            return numero.toString();
-        }
-        return valor;
-    }
-    
-    async function preencherCampo(elemento, valor, descricao = '') {
-        if (!elemento) {
-            addLog(`⚠️ Campo não encontrado: ${descricao}`, 'warning');
-            return false;
-        }
-        if (valor === undefined || valor === null || valor === '') {
-            addLog(`⏭️ Campo vazio: ${descricao}`, 'info');
-            return true;
-        }
-        try {
-            elemento.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            await wait(100);
-            
-            if (elemento.tagName === 'SELECT') {
-                const valorStr = String(valor).trim();
-                let encontrado = false;
-                for (let i = 0; i < elemento.options.length; i++) {
-                    const option = elemento.options[i];
-                    if (option.text.includes(valorStr) || option.value === valorStr) {
-                        elemento.selectedIndex = i;
-                        encontrado = true;
-                        break;
-                    }
-                }
-                if (!encontrado && valorStr) {
-                    const newOption = document.createElement('option');
-                    newOption.value = valorStr;
-                    newOption.text = valorStr;
-                    elemento.appendChild(newOption);
-                    elemento.value = valorStr;
-                    encontrado = true;
-                }
-                if (encontrado) {
-                    const event = new Event('change', { bubbles: true });
-                    elemento.dispatchEvent(event);
-                    addLog(`✅ Preencheu select: ${descricao} = ${valor}`, 'success');
-                    return true;
-                }
-                return false;
-            } else if (elemento.tagName === 'INPUT' || elemento.tagName === 'TEXTAREA') {
-                let valorFinal = valor;
-                if (descricao.includes('Qtd') || descricao.includes('Quantidade')) {
-                    valorFinal = converterNumero(valor);
-                }
+                elemento.dispatchEvent(enterEvent);
                 
-                elemento.value = '';
-                elemento.focus();
-                await wait(50);
-                elemento.value = String(valorFinal);
-                const event = new Event('input', { bubbles: true });
-                elemento.dispatchEvent(event);
-                elemento.blur();
-                await wait(50);
-                ['change', 'blur'].forEach(eventType => {
-                    const event = new Event(eventType, { bubbles: true });
-                    elemento.dispatchEvent(event);
+                const keyupEvent = new KeyboardEvent('keyup', {
+                    key: 'Enter',
+                    code: 'Enter',
+                    keyCode: 13,
+                    which: 13,
+                    bubbles: true,
+                    cancelable: true
                 });
-                addLog(`✅ Preencheu campo: ${descricao} = ${valorFinal}`, 'success');
+                elemento.dispatchEvent(keyupEvent);
+                
+                this.addLog(`⌨️ Enter pressionado em: ${descricao}`, 'info');
+                await this.wait(CONFIG.delayAposEnter);
                 return true;
+            } catch (e) {
+                return false;
             }
-            return false;
-        } catch (e) {
-            addLog(`❌ Erro ao preencher ${descricao}: ${e.message}`, 'error');
-            return false;
-        }
-    }
-    
-    async function preencherQtdServico(elemento, valor, descricao = '') {
-        if (!elemento) {
-            addLog(`⚠️ Campo não encontrado: ${descricao}`, 'warning');
-            return false;
-        }
-        if (valor === undefined || valor === null || valor === '') {
-            addLog(`⏭️ ${descricao} vazio, pulando...`, 'info');
-            return true;
         }
         
-        let valorFinal = converterNumero(valor);
-        addLog(`🔢 Tentando preencher ${descricao} com valor: "${valorFinal}" (original: "${valor}")`, 'info');
-        
-        try {
-            elemento.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            await wait(200);
+        async encontrarMaraCode() {
+            this.addLog('🔍 Procurando campo MaraCode...', 'info');
             
-            elemento.click();
-            await wait(100);
-            elemento.focus();
-            await wait(100);
-            elemento.value = '';
-            await wait(50);
-            elemento.value = String(valorFinal);
-            elemento.dispatchEvent(new Event('input', { bubbles: true }));
-            elemento.dispatchEvent(new Event('change', { bubbles: true }));
-            elemento.blur();
-            await wait(100);
-            
-            if (elemento.value === String(valorFinal) || elemento.value.replace(',', '.') === String(valorFinal)) {
-                addLog(`✅ ${descricao} preenchido: ${elemento.value}`, 'success');
-                return true;
-            }
-            
-            elemento.value = String(valorFinal);
-            elemento.dispatchEvent(new Event('input', { bubbles: true }));
-            elemento.dispatchEvent(new Event('change', { bubbles: true }));
-            await wait(100);
-            
-            if (elemento.value === String(valorFinal) || elemento.value.replace(',', '.') === String(valorFinal)) {
-                addLog(`✅ ${descricao} preenchido (estratégia 2): ${elemento.value}`, 'success');
-                return true;
-            }
-            
-            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                window.HTMLInputElement.prototype, 'value'
-            ).set;
-            nativeInputValueSetter.call(elemento, String(valorFinal));
-            elemento.dispatchEvent(new Event('input', { bubbles: true }));
-            elemento.dispatchEvent(new Event('change', { bubbles: true }));
-            await wait(100);
-            
-            if (elemento.value === String(valorFinal) || elemento.value.replace(',', '.') === String(valorFinal)) {
-                addLog(`✅ ${descricao} preenchido (estratégia 3): ${elemento.value}`, 'success');
-                return true;
-            }
-            
-            addLog(`⚠️ ${descricao} NÃO preenchido. Valor atual: "${elemento.value}"`, 'warning');
-            return false;
-        } catch (e) {
-            addLog(`❌ Erro ao preencher ${descricao}: ${e.message}`, 'error');
-            return false;
-        }
-    }
-    
-    // ===== FUNÇÃO ESPECÍFICA PARA ENCONTRAR LOCAL OBRA =====
-    async function encontrarLocalObra() {
-        addLog('🔍 Procurando campo Local Execução Obra...', 'info');
-        
-        // Estratégia 1: Por ID
-        let elemento = document.querySelector('#localObra');
-        if (elemento) {
-            const isVisible = elemento.offsetParent !== null && elemento.offsetWidth > 0;
-            if (isVisible) {
-                addLog('✅ Local Obra encontrado por ID (visível)', 'success');
+            let elemento = await this.waitForElement('//input[@placeholder="Mara Code"]', 3000);
+            if (elemento) {
+                this.addLog('✅ MaraCode encontrado por placeholder', 'success');
                 return elemento;
-            } else {
-                addLog('⚠️ Local Obra encontrado por ID mas NÃO visível', 'warning');
             }
+            
+            elemento = document.querySelector('input[placeholder="Mara Code"]');
+            if (elemento) {
+                this.addLog('✅ MaraCode encontrado por CSS selector', 'success');
+                return elemento;
+            }
+            
+            const inputs = document.querySelectorAll('input');
+            for (const input of inputs) {
+                if (input.placeholder && input.placeholder.toLowerCase().includes('mara')) {
+                    this.addLog(`✅ MaraCode encontrado por busca: "${input.placeholder}"`, 'success');
+                    return input;
+                }
+            }
+            
+            this.addLog('❌ MaraCode NÃO encontrado!', 'error');
+            return null;
         }
         
-        // Estratégia 2: Por XPATH
-        try {
-            const result = document.evaluate(
-                '//input[@id="localObra"]',
-                document,
-                null,
-                XPathResult.FIRST_ORDERED_NODE_TYPE,
-                null
-            );
-            elemento = result.singleNodeValue;
+        async encontrarPesquisaMaterial() {
+            this.addLog('🔍 Procurando campo Pesquisa Material...', 'info');
+            
+            await this.wait(2000);
+            
+            let elemento = await this.waitForElement('//input[@placeholder="Material"]', 3000);
             if (elemento) {
                 const isVisible = elemento.offsetParent !== null && elemento.offsetWidth > 0;
                 if (isVisible) {
-                    addLog('✅ Local Obra encontrado por XPATH (visível)', 'success');
+                    this.addLog('✅ Pesquisa Material encontrado (visível)', 'success');
                     return elemento;
                 }
             }
-        } catch (e) {}
-        
-        // Estratégia 3: Por placeholder
-        const inputs = document.querySelectorAll('input[placeholder="Local Obra"]');
-        for (const input of inputs) {
-            const isVisible = input.offsetParent !== null && input.offsetWidth > 0;
-            if (isVisible) {
-                addLog('✅ Local Obra encontrado por placeholder (visível)', 'success');
-                return input;
-            }
-        }
-        
-        // Estratégia 4: Por formcontrolname
-        const inputsByName = document.querySelectorAll('input[formcontrolname="localObra"]');
-        for (const input of inputsByName) {
-            const isVisible = input.offsetParent !== null && input.offsetWidth > 0;
-            if (isVisible) {
-                addLog('✅ Local Obra encontrado por formcontrolname (visível)', 'success');
-                return input;
-            }
-        }
-        
-        // Estratégia 5: Procura em todos os inputs visíveis com placeholder similar
-        const allInputs = document.querySelectorAll('input');
-        for (const input of allInputs) {
-            if (input.offsetParent !== null && input.offsetWidth > 0) {
-                if (input.placeholder && input.placeholder.toLowerCase().includes('local')) {
-                    addLog(`✅ Local Obra encontrado por busca: "${input.placeholder}"`, 'success');
-                    return input;
-                }
-            }
-        }
-        
-        addLog('❌ Local Obra NÃO encontrado ou NÃO visível!', 'error');
-        return null;
-    }
-    
-    // ===== FUNÇÃO ESPECÍFICA PARA PREENCHER LOCAL OBRA =====
-    async function preencherLocalObraEspecifico(elemento, valor, descricao = '') {
-        if (!elemento) {
-            addLog(`❌ Campo ${descricao} é nulo`, 'error');
-            return false;
-        }
-        if (valor === undefined || valor === null || valor === '') {
-            addLog(`⏭️ ${descricao} vazio, pulando...`, 'info');
-            return true;
-        }
-        
-        addLog(`📍 Preenchendo ${descricao} com: "${valor}"`, 'info');
-        
-        try {
-            elemento.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            await wait(300);
             
-            elemento.click();
-            await wait(200);
-            elemento.focus();
-            await wait(200);
-            
-            elemento.value = '';
-            await wait(100);
-            elemento.value = String(valor);
-            elemento.dispatchEvent(new Event('input', { bubbles: true }));
-            elemento.dispatchEvent(new Event('change', { bubbles: true }));
-            await wait(300);
-            
-            elemento.blur();
-            await wait(100);
-            
-            addLog(`✅ ${descricao} preenchido: "${elemento.value}"`, 'success');
-            return true;
-        } catch (e) {
-            addLog(`❌ Erro ao preencher ${descricao}: ${e.message}`, 'error');
-            return false;
-        }
-    }
-    
-    async function preencherId(inputId, valor) {
-        if (!inputId) return false;
-        if (valor === undefined || valor === null || valor === '') return false;
-        inputId.focus();
-        await wait(100);
-        inputId.value = '';
-        inputId.value = String(valor);
-        inputId.dispatchEvent(new Event('input', { bubbles: true }));
-        inputId.dispatchEvent(new Event('change', { bubbles: true }));
-        inputId.blur();
-        await wait(100);
-        return inputId.value === String(valor);
-    }
-    
-    async function pressionarEnter(elemento, descricao = '') {
-        if (!elemento) return false;
-        try {
-            elemento.focus();
-            await wait(100);
-            const enterEvent = new KeyboardEvent('keydown', {
-                key: 'Enter',
-                code: 'Enter',
-                keyCode: 13,
-                which: 13,
-                bubbles: true,
-                cancelable: true
-            });
-            elemento.dispatchEvent(enterEvent);
-            const keyupEvent = new KeyboardEvent('keyup', {
-                key: 'Enter',
-                code: 'Enter',
-                keyCode: 13,
-                which: 13,
-                bubbles: true,
-                cancelable: true
-            });
-            elemento.dispatchEvent(keyupEvent);
-            addLog(`⌨️ Enter pressionado em: ${descricao}`, 'info');
-            await wait(CONFIG.delayAposEnter);
-            return true;
-        } catch (e) {
-            return false;
-        }
-    }
-    
-    async function encontrarMaraCode() {
-        addLog('🔍 Procurando campo MaraCode...', 'info');
-        
-        let elemento = await waitForElement('//input[@placeholder="Mara Code"]', 3000);
-        if (elemento) {
-            addLog('✅ MaraCode encontrado por placeholder', 'success');
-            return elemento;
-        }
-        
-        elemento = document.querySelector('input[placeholder="Mara Code"]');
-        if (elemento) {
-            addLog('✅ MaraCode encontrado por CSS selector', 'success');
-            return elemento;
-        }
-        
-        const inputs = document.querySelectorAll('input');
-        for (const input of inputs) {
-            if (input.placeholder && input.placeholder.toLowerCase().includes('mara')) {
-                addLog(`✅ MaraCode encontrado por busca: "${input.placeholder}"`, 'success');
-                return input;
-            }
-        }
-        
-        addLog('❌ MaraCode NÃO encontrado!', 'error');
-        return null;
-    }
-    
-    async function encontrarPesquisaMaterial() {
-        addLog('🔍 Procurando campo Pesquisa Material...', 'info');
-        
-        let elemento = await waitForElement('//input[@placeholder="Material"]', 3000);
-        if (elemento) {
-            const isVisible = elemento.offsetParent !== null && elemento.offsetWidth > 0;
-            if (isVisible) {
-                addLog('✅ Pesquisa Material encontrado (visível)', 'success');
-                return elemento;
-            }
-        }
-        
-        elemento = document.querySelector('input[placeholder="Material"]');
-        if (elemento) {
-            const isVisible = elemento.offsetParent !== null && elemento.offsetWidth > 0;
-            if (isVisible) {
-                addLog('✅ Pesquisa Material encontrado por CSS (visível)', 'success');
-                return elemento;
-            }
-        }
-        
-        const inputs = document.querySelectorAll('input');
-        for (const input of inputs) {
-            if (input.placeholder && input.placeholder.toLowerCase().includes('material')) {
-                const isVisible = input.offsetParent !== null && input.offsetWidth > 0;
+            elemento = document.querySelector('input[placeholder="Material"]');
+            if (elemento) {
+                const isVisible = elemento.offsetParent !== null && elemento.offsetWidth > 0;
                 if (isVisible) {
-                    addLog(`✅ Pesquisa Material encontrado por busca: "${input.placeholder}"`, 'success');
-                    return input;
+                    this.addLog('✅ Pesquisa Material encontrado por CSS (visível)', 'success');
+                    return elemento;
                 }
             }
-        }
-        
-        addLog('❌ Pesquisa Material NÃO encontrado ou NÃO visível!', 'error');
-        return null;
-    }
-    
-    async function preencherPesquisaMaterial(inputPesquisa, valor, descricao = '') {
-        if (!inputPesquisa) {
-            addLog(`❌ Campo ${descricao} é nulo`, 'error');
-            return false;
-        }
-        if (valor === undefined || valor === null || valor === '') {
-            addLog(`⏭️ ${descricao} vazio, pulando...`, 'info');
-            return true;
-        }
-        
-        addLog(`🔍 Preenchendo ${descricao} com: "${valor}"`, 'info');
-        
-        try {
-            inputPesquisa.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            await wait(300);
             
-            inputPesquisa.click();
-            await wait(200);
-            inputPesquisa.focus();
-            await wait(200);
-            
-            inputPesquisa.value = '';
-            await wait(100);
-            inputPesquisa.value = String(valor);
-            inputPesquisa.dispatchEvent(new Event('input', { bubbles: true }));
-            inputPesquisa.dispatchEvent(new Event('change', { bubbles: true }));
-            await wait(300);
-            
-            addLog(`⌨️ Pressionando Enter para pesquisar: ${valor}`, 'info');
-            await pressionarEnter(inputPesquisa, 'Pesquisa Material');
-            
-            await wait(2000);
-            
-            const selectMaterial = await waitForElement(CONFIG.xpaths.selectMaterial, 3000);
-            if (selectMaterial && selectMaterial.value && selectMaterial.value.trim() !== '') {
-                addLog(`✅ Material preenchido automaticamente: "${selectMaterial.value}"`, 'success');
-            } else {
-                addLog(`⚠️ Material NÃO foi preenchido automaticamente`, 'warning');
-            }
-            
-            return true;
-        } catch (e) {
-            addLog(`❌ Erro ao preencher ${descricao}: ${e.message}`, 'error');
-            return false;
-        }
-    }
-    
-    async function aguardarExpansaoFormulario(classe) {
-        const isMaterial = classe && classe.toUpperCase().includes('MISC.TBRA');
-        
-        if (isMaterial) {
-            addLog(`🔍 Detectado MATERIAL (${classe}) - Aguardando expansão...`, 'info');
-            
-            let pesquisaVisible = false;
-            let tentativas = 0;
-            const maxTentativas = 30;
-            
-            while (tentativas < maxTentativas && !pesquisaVisible) {
-                const inputPesquisa = document.querySelector('input[placeholder="Material"]');
-                if (inputPesquisa) {
-                    const isVisible = inputPesquisa.offsetParent !== null && inputPesquisa.offsetWidth > 0;
+            const inputs = document.querySelectorAll('input');
+            for (const input of inputs) {
+                if (input.placeholder && input.placeholder.toLowerCase().includes('material')) {
+                    const isVisible = input.offsetParent !== null && input.offsetWidth > 0;
                     if (isVisible) {
-                        pesquisaVisible = true;
-                        addLog(`✅ Formulário expandido!`, 'success');
-                        break;
+                        this.addLog(`✅ Pesquisa Material encontrado por busca: "${input.placeholder}"`, 'success');
+                        return input;
                     }
                 }
-                tentativas++;
-                await wait(300);
             }
             
-            if (!pesquisaVisible) {
-                addLog(`⚠️ Formulário não expandiu`, 'warning');
+            this.addLog('❌ Pesquisa Material NÃO encontrado ou NÃO visível!', 'error');
+            return null;
+        }
+        
+        async preencherPesquisaMaterial(inputPesquisa, valor, descricao = '') {
+            if (!inputPesquisa) {
+                this.addLog(`❌ Campo ${descricao} é nulo`, 'error');
+                return false;
+            }
+            if (valor === undefined || valor === null || valor === '') {
+                this.addLog(`⏭️ ${descricao} vazio, pulando...`, 'info');
+                return true;
             }
             
-            await wait(CONFIG.delayExpansaoFormulario);
-        } else {
-            addLog(`📋 Serviço detectado (${classe})`, 'info');
-            await wait(500);
-        }
-    }
-    
-    function aguardarPreenchimentoAutomatico(elemento, valorEsperado, timeout = 3000) {
-        return new Promise((resolve) => {
-            const startTime = Date.now();
-            function verificar() {
-                if (elemento.value && elemento.value.trim() !== '') {
-                    addLog(`✅ Campo preenchido automaticamente: "${elemento.value}"`, 'success');
-                    resolve(true);
-                    return;
+            this.addLog(`🔍 Preenchendo ${descricao} com: "${valor}"`, 'info');
+            
+            try {
+                inputPesquisa.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                await this.wait(500);
+                
+                inputPesquisa.click();
+                await this.wait(300);
+                inputPesquisa.focus();
+                await this.wait(300);
+                
+                inputPesquisa.value = '';
+                await this.wait(200);
+                inputPesquisa.value = String(valor);
+                inputPesquisa.dispatchEvent(new Event('input', { bubbles: true }));
+                inputPesquisa.dispatchEvent(new Event('change', { bubbles: true }));
+                await this.wait(500);
+                
+                this.addLog(`⌨️ Pressionando Enter para pesquisar: ${valor}`, 'info');
+                await this.pressionarEnter(inputPesquisa, 'Pesquisa Material');
+                
+                await this.wait(3000);
+                
+                const selectMaterial = await this.waitForElement(CONFIG.xpaths.selectMaterial, 3000);
+                if (selectMaterial && selectMaterial.value && selectMaterial.value.trim() !== '') {
+                    this.addLog(`✅ Material preenchido automaticamente: "${selectMaterial.value}"`, 'success');
+                } else {
+                    this.addLog(`⚠️ Material NÃO foi preenchido automaticamente`, 'warning');
                 }
-                if (Date.now() - startTime > timeout) {
-                    addLog(`⚠️ Campo não preenchido automaticamente`, 'warning');
-                    resolve(false);
-                    return;
-                }
-                setTimeout(verificar, 300);
-            }
-            verificar();
-        });
-    }
-    
-    function verificarMensagemRetorno() {
-        const mensagemSucesso = document.querySelector('.alert-success');
-        if (mensagemSucesso) {
-            const texto = mensagemSucesso.textContent.trim();
-            addLog(`✅ ${texto}`, 'success');
-            return { status: 'sucesso', mensagem: texto };
-        }
-        const mensagemErro = document.querySelector('.alert-danger');
-        if (mensagemErro) {
-            const texto = mensagemErro.textContent.trim();
-            addLog(`❌ ${texto}`, 'error');
-            return { status: 'erro', mensagem: texto };
-        }
-        const mensagens = document.querySelectorAll('.alert');
-        for (const msg of mensagens) {
-            if (msg.textContent.includes('sucesso') || msg.textContent.includes('Sucesso')) {
-                return { status: 'sucesso', mensagem: msg.textContent.trim() };
-            }
-            if (msg.textContent.includes('erro') || msg.textContent.includes('obrigatório')) {
-                return { status: 'erro', mensagem: msg.textContent.trim() };
+                
+                await this.wait(CONFIG.delayAposPreencher);
+                return true;
+            } catch (e) {
+                this.addLog(`❌ Erro ao preencher ${descricao}: ${e.message}`, 'error');
+                return false;
             }
         }
-        return null;
-    }
-    
-    function detectarColunas(data) {
-        if (!data || data.length === 0) return null;
-        const headers = Object.keys(data[0]);
-        addLog(`📋 Colunas encontradas: ${headers.join(', ')}`, 'info');
         
-        const mapeamento = {};
-        const colunasEsperadas = {
-            'ID': ['id', 'Id', 'ID', 'Codigo', 'Cod', 'NUMERO', 'Numero'],
-            'PRANCHA': ['prancha', 'Prancha', 'PRANCHA'],
-            'CLASSE': ['classe', 'Classe', 'CLASSE'],
-            'MARACODE': ['maracode', 'MaraCode', 'MARACODE', 'MARACOD'],
-            'QTD SERVICO EXECUTADO': ['qtd servico executado', 'Qtd Servico Executado', 'servico executado', 'QTD_SERVICO'],
-            'PESQUISA MATERIAL': ['pesquisa material', 'Pesquisa Material', 'material pesquisa', 'PESQUISA_MATERIAL', 'PESQUISA MATERIA'],
-            'QTD MATERIAL': ['qtd material', 'Qtd Material', 'quantidade material', 'QTD_MATERIAL', 'QTD MATERIA'],
-            'LOCAL EXECUCAO OBRA': ['local execucao obra', 'Local Execucao Obra', 'local obra', 'LOCAL_EXECUCAO', 'LOCAL EXECUCAO OBR']
-        };
-        
-        for (const [campo, variacoes] of Object.entries(colunasEsperadas)) {
-            for (const variacao of variacoes) {
-                const chave = headers.find(h => h.toLowerCase().trim() === variacao.toLowerCase().trim());
-                if (chave) {
-                    mapeamento[campo] = chave;
-                    addLog(`✅ Mapeou "${campo}" -> coluna "${chave}"`, 'success');
-                    break;
-                }
-            }
-            if (!mapeamento[campo]) {
-                for (const header of headers) {
-                    const headerLower = header.toLowerCase().trim();
-                    for (const variacao of variacoes) {
-                        if (headerLower.includes(variacao.toLowerCase().trim()) || 
-                            variacao.toLowerCase().trim().includes(headerLower)) {
-                            mapeamento[campo] = header;
-                            addLog(`✅ Mapeou "${campo}" -> coluna "${header}" (similar)`, 'success');
+        async aguardarExpansaoFormulario(classe) {
+            const isMaterial = classe && classe.toUpperCase().includes('MISC.TBRA');
+            
+            if (isMaterial) {
+                this.addLog(`🔍 Detectado MATERIAL (${classe}) - Aguardando expansão...`, 'info');
+                
+                let pesquisaVisible = false;
+                let tentativas = 0;
+                const maxTentativas = 30;
+                
+                while (tentativas < maxTentativas && !pesquisaVisible) {
+                    const inputPesquisa = document.querySelector('input[placeholder="Material"]');
+                    if (inputPesquisa) {
+                        const isVisible = inputPesquisa.offsetParent !== null && inputPesquisa.offsetWidth > 0;
+                        if (isVisible) {
+                            pesquisaVisible = true;
+                            this.addLog(`✅ Formulário expandido!`, 'success');
                             break;
                         }
                     }
-                    if (mapeamento[campo]) break;
+                    tentativas++;
+                    await this.wait(500);
                 }
+                
+                if (!pesquisaVisible) {
+                    this.addLog(`⚠️ Formulário não expandiu após ${maxTentativas} tentativas`, 'warning');
+                    await this.wait(2000);
+                }
+                
+                await this.wait(CONFIG.delayExpansaoFormulario);
+            } else {
+                this.addLog(`📋 Serviço detectado (${classe})`, 'info');
+                await this.wait(1000);
             }
         }
         
-        if (!mapeamento['ID'] && headers.length > 0) {
-            mapeamento['ID'] = headers[0];
-            addLog(`⚠️ Usando primeira coluna como ID: "${headers[0]}"`, 'warning');
-        }
-        
-        addLog(`📊 Mapeamento final: ${JSON.stringify(mapeamento, null, 2)}`, 'info');
-        return mapeamento;
-    }
-    
-    function addLog(mensagem, tipo = 'info') {
-        const entry = { timestamp: new Date().toLocaleTimeString(), mensagem, tipo };
-        log.push(entry);
-        const logContainer = document.getElementById('auto-log');
-        if (logContainer) {
-            const div = document.createElement('div');
-            div.className = `log-entry log-${tipo}`;
-            div.textContent = `[${entry.timestamp}] ${mensagem}`;
-            logContainer.appendChild(div);
-            logContainer.scrollTop = logContainer.scrollHeight;
-        }
-    }
-    
-    function mostrarAlertaFinalizacao() {
-        const sucessos = relatorio.filter(r => r.status === 'sucesso').length;
-        const erros = relatorio.filter(r => r.status === 'erro').length;
-        const pulados = relatorio.filter(r => r.status === 'pulado').length;
-        const total = relatorio.length;
-        
-        const alerta = document.createElement('div');
-        alerta.style.cssText = `
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            z-index: 99999; background: white; padding: 30px 40px; border-radius: 12px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3); min-width: 400px; max-width: 500px;
-            text-align: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            animation: alertaFadeIn 0.4s ease;
-        `;
-        
-        const icon = erros > 0 ? '⚠️' : '✅';
-        const cor = erros > 0 ? '#dc3545' : '#28a745';
-        const titulo = erros > 0 ? 'Processo Finalizado com Alertas!' : 'Processo Finalizado com Sucesso!';
-        
-        alerta.innerHTML = `
-            <div style="font-size: 48px; margin-bottom: 10px;">${icon}</div>
-            <h2 style="color: ${cor}; margin: 0 0 15px 0; font-size: 22px;">${titulo}</h2>
-            <div style="display: flex; gap: 15px; justify-content: center; margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;">
-                <div><div style="font-size: 28px; font-weight: 600; color: #28a745;">${sucessos}</div><div style="font-size: 12px; color: #6c757d;">✅ Sucessos</div></div>
-                <div><div style="font-size: 28px; font-weight: 600; color: #dc3545;">${erros}</div><div style="font-size: 12px; color: #6c757d;">❌ Erros</div></div>
-                <div><div style="font-size: 28px; font-weight: 600; color: #ffc107;">${pulados}</div><div style="font-size: 12px; color: #6c757d;">⏭️ Pulados</div></div>
-                <div><div style="font-size: 28px; font-weight: 600; color: #17a2b8;">${total}</div><div style="font-size: 12px; color: #6c757d;">📊 Total</div></div>
-            </div>
-            <div style="font-size: 13px; color: #6c757d; margin-bottom: 15px;">Clique em "Ver Relatório" para detalhes</div>
-            <div style="display: flex; gap: 10px; justify-content: center;">
-                <button id="btn-alerta-fechar" style="padding: 8px 25px; background: #6c757d; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">Fechar</button>
-                <button id="btn-alerta-relatorio" style="padding: 8px 25px; background: #17a2b8; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">📊 Ver Relatório</button>
-            </div>
-        `;
-        document.body.appendChild(alerta);
-        
-        if (!document.getElementById('alerta-styles')) {
-            const style = document.createElement('style');
-            style.id = 'alerta-styles';
-            style.textContent = `@keyframes alertaFadeIn { from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }`;
-            document.head.appendChild(style);
-        }
-        
-        const overlay = document.createElement('div');
-        overlay.id = 'alerta-overlay';
-        overlay.style.cssText = `position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 99998; animation: alertaFadeIn 0.3s ease;`;
-        document.body.appendChild(overlay);
-        
-        document.getElementById('btn-alerta-fechar').addEventListener('click', () => { alerta.remove(); overlay.remove(); });
-        document.getElementById('btn-alerta-relatorio').addEventListener('click', () => { alerta.remove(); overlay.remove(); baixarRelatorio(); });
-        overlay.addEventListener('click', () => { alerta.remove(); overlay.remove(); });
-    }
-    
-    function atualizarStatusPopup() {
-        const statusText = document.getElementById('popup-status-text');
-        if (statusText) {
-            const total = relatorio.length;
-            const sucessos = relatorio.filter(r => r.status === 'sucesso').length;
-            const erros = relatorio.filter(r => r.status === 'erro').length;
-            const pulados = relatorio.filter(r => r.status === 'pulado').length;
-            if (total > 0) {
-                statusText.textContent = `✅ ${sucessos} OK | ❌ ${erros} ERRO | ⏭️ ${pulados} PULADO`;
-                statusText.style.color = erros > 0 ? '#dc3545' : '#28a745';
-            }
-        }
-    }
-    
-    function gerarRelatorio() {
-        if (relatorio.length === 0) {
-            addLog('⚠️ Nenhum dado para gerar relatório', 'warning');
-            return;
-        }
-        const sucessos = relatorio.filter(r => r.status === 'sucesso').length;
-        const erros = relatorio.filter(r => r.status === 'erro').length;
-        const pulados = relatorio.filter(r => r.status === 'pulado').length;
-        
-        let relatorioTexto = '========================================\n';
-        relatorioTexto += 'RELATÓRIO DE CADASTRO DE SERVIÇOS/MATERIAIS\n';
-        relatorioTexto += `Data: ${new Date().toLocaleString()}\n`;
-        relatorioTexto += `Total de registros: ${relatorio.length}\n`;
-        relatorioTexto += '========================================\n\n';
-        relatorioTexto += `✅ Sucessos: ${sucessos}\n`;
-        relatorioTexto += `❌ Erros: ${erros}\n`;
-        relatorioTexto += `⏭️ Pulados: ${pulados}\n`;
-        relatorioTexto += `📊 Total: ${relatorio.length}\n`;
-        relatorioTexto += '========================================\n\n';
-        relatorioTexto += 'DETALHES DOS REGISTROS:\n';
-        relatorioTexto += '----------------------------------------\n';
-        relatorio.forEach((item, index) => {
-            const statusEmoji = item.status === 'sucesso' ? '✅' : item.status === 'erro' ? '❌' : '⏭️';
-            const statusLabel = item.status.toUpperCase();
-            relatorioTexto += `${index + 1}. ID: ${item.id} - ${statusEmoji} ${statusLabel}\n`;
-            if (item.mensagem) {
-                relatorioTexto += `   Mensagem: ${item.mensagem}\n`;
-            }
-            if (item.erro) {
-                relatorioTexto += `   Erro: ${item.erro}\n`;
-            }
-            relatorioTexto += `   Dados: ${JSON.stringify(item.dados)}\n`;
-            relatorioTexto += '----------------------------------------\n';
-        });
-        relatorioTexto += '\n========================================\n';
-        relatorioTexto += 'FIM DO RELATÓRIO\n';
-        relatorioTexto += '========================================\n';
-        return relatorioTexto;
-    }
-    
-    function baixarRelatorio() {
-        const relatorioTexto = gerarRelatorio();
-        if (!relatorioTexto) return;
-        const blob = new Blob([relatorioTexto], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `relatorio_cadastro_${new Date().toISOString().slice(0,10)}.txt`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        addLog(`📥 Relatório baixado com ${relatorio.length} registros`, 'success');
-    }
-    
-    async function executarCadastro(dados, index) {
-        const idValue = dados['ID'] || dados['id'] || dados['Id'];
-        
-        if (!idValue) {
-            const erro = 'ID vazio';
-            addLog(`❌ Registro ${index + 1} sem ID! Pulando...`, 'error');
-            relatorio.push({
-                id: 'N/A',
-                status: 'pulado',
-                mensagem: 'ID vazio',
-                dados: dados,
-                erro: erro
+        aguardarPreenchimentoAutomatico(elemento, valorEsperado, timeout = 4000) {
+            return new Promise((resolve) => {
+                const startTime = Date.now();
+                const self = this;
+                function verificar() {
+                    if (elemento.value && elemento.value.trim() !== '') {
+                        self.addLog(`✅ Campo preenchido automaticamente: "${elemento.value}"`, 'success');
+                        resolve(true);
+                        return;
+                    }
+                    if (Date.now() - startTime > timeout) {
+                        self.addLog(`⚠️ Campo não preenchido automaticamente`, 'warning');
+                        resolve(false);
+                        return;
+                    }
+                    setTimeout(verificar, 500);
+                }
+                verificar();
             });
-            atualizarStatusPopup();
-            return { sucesso: false, erro: erro, pulado: true };
         }
         
-        addLog(`📝 Processando ID: ${idValue}`, 'info');
+        verificarMensagemRetorno() {
+            const mensagemSucesso = document.querySelector('.alert-success');
+            if (mensagemSucesso) {
+                const texto = mensagemSucesso.textContent.trim();
+                this.addLog(`✅ ${texto}`, 'success');
+                return { status: 'sucesso', mensagem: texto };
+            }
+            const mensagemErro = document.querySelector('.alert-danger');
+            if (mensagemErro) {
+                const texto = mensagemErro.textContent.trim();
+                this.addLog(`❌ ${texto}`, 'error');
+                return { status: 'erro', mensagem: texto };
+            }
+            const mensagens = document.querySelectorAll('.alert');
+            for (const msg of mensagens) {
+                if (msg.textContent.includes('sucesso') || msg.textContent.includes('Sucesso')) {
+                    return { status: 'sucesso', mensagem: msg.textContent.trim() };
+                }
+                if (msg.textContent.includes('erro') || msg.textContent.includes('obrigatório')) {
+                    return { status: 'erro', mensagem: msg.textContent.trim() };
+                }
+            }
+            return null;
+        }
         
-        const prancha = dados['PRANCHA'] || dados['Prancha'] || '';
-        const classe = dados['CLASSE'] || dados['Classe'] || '';
-        const maraCode = dados['MARACODE'] || dados['MaraCode'] || '';
-        const qtdServico = dados['QTD SERVICO EXECUTADO'] || dados['Qtd Servico Executado'] || '';
-        const pesquisaMaterial = dados['PESQUISA MATERIAL'] || dados['Pesquisa Material'] || '';
-        const qtdMaterial = dados['QTD MATERIAL'] || dados['Qtd Material'] || '';
-        const localObra = dados['LOCAL EXECUCAO OBRA'] || dados['Local Execucao Obra'] || '';
+        reordenarDados(dados) {
+            if (!dados || dados.length === 0) return dados;
+            
+            const materiais = [];
+            const servicos = [];
+            
+            for (const item of dados) {
+                const classe = item['CLASSE'] || item['Classe'] || '';
+                if (classe.toUpperCase().includes('MISC.TBRA')) {
+                    materiais.push(item);
+                } else {
+                    servicos.push(item);
+                }
+            }
+            
+            const resultado = [...materiais, ...servicos];
+            this.addLog(`📊 REORDENAÇÃO: ${materiais.length} materiais (primeiro), ${servicos.length} serviços (depois)`, 'info');
+            
+            return resultado;
+        }
         
-        addLog(`📋 Classe: ${classe || 'N/A'}`, 'info');
-        addLog(`📋 MaraCode: "${maraCode}"`, 'info');
-        addLog(`📋 Qtd Serviço: "${qtdServico}"`, 'info');
-        addLog(`📋 Pesquisa Material: "${pesquisaMaterial}"`, 'info');
-        addLog(`📋 Qtd Material: "${qtdMaterial}"`, 'info');
-        addLog(`📋 Local Obra: "${localObra}"`, 'info');
+        addLog(mensagem, tipo = 'info') {
+            const entry = { timestamp: new Date().toLocaleTimeString(), mensagem, tipo };
+            this.log.push(entry);
+            const logContainer = document.getElementById('auto-log');
+            if (logContainer) {
+                const div = document.createElement('div');
+                div.className = `log-entry log-${tipo}`;
+                div.textContent = `[${entry.timestamp}] ${mensagem}`;
+                logContainer.appendChild(div);
+                logContainer.scrollTop = logContainer.scrollHeight;
+            }
+        }
         
-        try {
-            // ===== PASSO 1: COLLAPSE =====
-            const menuElement = await waitForElement('//span[@id="ott-sidebar-collapse"]', 5000);
-            if (!await clickElement(menuElement, 'Menu')) {
-                const erro = 'Menu não encontrado';
-                relatorio.push({ id: idValue, status: 'erro', mensagem: erro, dados: dados, erro: erro });
-                atualizarStatusPopup();
-                return { sucesso: false, erro: erro };
+        // ===== PROCESSAMENTO CSV =====
+        processarCSV(texto) {
+            return this.processador.processar(texto);
+        }
+        
+        mapearColunas() {
+            return this.processador.mapearColunas();
+        }
+        
+        getDadosMapeados() {
+            return this.processador.getDadosMapeados();
+        }
+        
+        carregarDados(dados) {
+            this.dados.carregarDados(dados);
+            this.processador.dados = dados;
+        }
+        
+        // ===== EXECUÇÃO PRINCIPAL =====
+        async executarCadastro(dados, index) {
+            const idValue = dados['ID'] || dados['id'] || dados['Id'];
+            const classe = dados['CLASSE'] || dados['Classe'] || '';
+            const isMaterial = classe.toUpperCase().includes('MISC.TBRA');
+            
+            this.addLog(`📝 === INICIANDO CADASTRO ${index + 1} ===`, 'info');
+            this.addLog(`📋 ID: ${idValue} | Classe: "${classe}" | Tipo: ${isMaterial ? 'MATERIAL' : 'SERVIÇO'}`, 'info');
+            
+            if (!idValue) {
+                const erro = 'ID vazio';
+                this.addLog(`❌ Registro ${index + 1} sem ID! Pulando...`, 'error');
+                this.dados.adicionarResultado('N/A', 'pulado', 'ID vazio', dados, erro);
+                return { sucesso: false, erro: erro, pulado: true };
             }
-            await wait(200);
             
-            // ===== PASSO 2: LISTA REQUISIÇÕES =====
-            const listaElement = await waitForElement('//a[@routerlink="/requisicoes-eps"]', 5000);
-            if (!await clickElement(listaElement, 'Lista EPS')) {
-                const erro = 'Lista não encontrada';
-                relatorio.push({ id: idValue, status: 'erro', mensagem: erro, dados: dados, erro: erro });
-                atualizarStatusPopup();
-                return { sucesso: false, erro: erro };
+            // Extrai todos os dados da planilha - CORRIGIDO
+            const prancha = dados['PRANCHA'] || dados['Prancha'] || '';
+            const maraCode = dados['MARACODE'] || dados['MaraCode'] || '';
+            const qtdServico = dados['QTD SERVICO EXECUTADO'] || dados['Qtd Servico Executado'] || '';
+            const pesquisaMaterial = dados['PESQUISA MATERIAL'] || dados['Pesquisa Material'] || '';
+            const qtdMaterial = dados['QTD MATERIAL'] || dados['Qtd Material'] || '';
+            const localObra = dados['LOCAL EXECUCAO OBRA'] || dados['Local Execucao Obra'] || '';
+            
+            // ===== CORREÇÃO: Verifica se os dados estão trocados =====
+            // Se QTD SERVICO está vazio e PESQUISA MATERIAL tem números, pode estar trocado
+            let qtdServicoCorrigido = qtdServico;
+            let pesquisaMaterialCorrigido = pesquisaMaterial;
+            
+            // Se qtdServico está vazio e pesquisaMaterial tem números (com vírgula)
+            if (!qtdServicoCorrigido && pesquisaMaterialCorrigido && pesquisaMaterialCorrigido.match(/[\d,]+/)) {
+                // Pode ser que os campos estejam trocados
+                this.addLog(`⚠️ Possível troca de campos detectada! QTD SERVICO está vazio e PESQUISA MATERIAL tem números.`, 'warning');
+                // Mantém como está, mas vamos verificar no sistema
             }
             
-            await wait(CONFIG.delayAposNavegacao);
+            const dadosCompletos = {
+                id: idValue,
+                classe: classe,
+                prancha: prancha,
+                maraCode: maraCode,
+                qtdServico: qtdServicoCorrigido,
+                pesquisaMaterial: pesquisaMaterialCorrigido,
+                qtdMaterial: qtdMaterial,
+                localObra: localObra,
+                isMaterial: isMaterial
+            };
             
-            // ===== PASSO 3: PREENCHER ID =====
-            const inputId = await waitForIdField();
-            if (!inputId) {
-                const fallback = document.querySelector('#filtroId');
-                if (fallback) {
-                    await preencherId(fallback, idValue);
-                } else {
-                    const erro = 'Campo ID não encontrado';
-                    relatorio.push({ id: idValue, status: 'erro', mensagem: erro, dados: dados, erro: erro });
-                    atualizarStatusPopup();
+            this.addLog(`📋 Dados completos: ${JSON.stringify(dadosCompletos)}`, 'info');
+            
+            try {
+                // ===== PASSO 1: COLLAPSE =====
+                const menuElement = await this.waitForElement('//span[@id="ott-sidebar-collapse"]', 5000);
+                if (!await this.clickElement(menuElement, 'Menu')) {
+                    const erro = 'Menu não encontrado';
+                    this.dados.adicionarResultado(idValue, 'erro', erro, dados, erro);
                     return { sucesso: false, erro: erro };
                 }
-            } else {
-                await preencherId(inputId, idValue);
-            }
-            
-            // ===== PASSO 4: BUSCAR =====
-            const btnBuscar = await waitForElement('//a[contains(@class, "btn-primary") and contains(text(), "Buscar")]', 5000);
-            if (!btnBuscar) {
-                const btnCSS = document.querySelector('.btn-primary.btn-sm.btn-block');
-                if (btnCSS) await clickElement(btnCSS, 'Buscar');
-                else {
-                    const erro = 'Botão Buscar não encontrado';
-                    relatorio.push({ id: idValue, status: 'erro', mensagem: erro, dados: dados, erro: erro });
-                    atualizarStatusPopup();
-                    return { sucesso: false, erro: erro };
-                }
-            } else {
-                await clickElement(btnBuscar, 'Buscar');
-            }
-            
-            await wait(CONFIG.delayAposBusca);
-            
-            // ===== PASSO 5: EDITAR =====
-            const btnEditar = await waitForElement('//a[contains(@title, "Editar Requisição")]', 4000);
-            if (!btnEditar) {
-                const btnCSS = document.querySelector('a[title="Editar Requisição"]');
-                if (btnCSS) await clickElement(btnCSS, 'Editar');
-                else {
-                    addLog(`⚠️ ID ${idValue} sem Editar`, 'warning');
-                    relatorio.push({ id: idValue, status: 'pulado', mensagem: 'Sem botão Editar', dados: dados });
-                    atualizarStatusPopup();
-                    return { sucesso: false, erro: 'Sem Editar', pulado: true };
-                }
-            } else {
-                await clickElement(btnEditar, 'Editar');
-            }
-            
-            // ===== PASSO 6: SERVIÇOS =====
-            const btnServico = await waitForElement('//a[contains(@title, "Serviços")]', 4000);
-            if (!btnServico) {
-                const btnCSS = document.querySelector('a[title="Serviços"]');
-                if (btnCSS) await clickElement(btnCSS, 'Serviços');
-                else {
-                    const erro = 'Serviços não encontrado';
-                    relatorio.push({ id: idValue, status: 'erro', mensagem: erro, dados: dados, erro: erro });
-                    atualizarStatusPopup();
-                    return { sucesso: false, erro: erro };
-                }
-            } else {
-                await clickElement(btnServico, 'Serviços');
-            }
-            
-            // ===== PASSO 7: ABA MEDIÇÃO =====
-            const abaMedicao = await waitForElement('//a[@role="tab" and contains(text(), "Medição de Campo")]', 4000);
-            if (!abaMedicao) {
-                const abas = document.querySelectorAll('a[role="tab"]');
-                let encontrada = null;
-                for (const aba of abas) {
-                    if (aba.textContent.includes('Medição de Campo')) {
-                        encontrada = aba;
-                        break;
-                    }
-                }
-                if (encontrada) await clickElement(encontrada, 'Aba Medição');
-                else {
-                    const erro = 'Aba não encontrada';
-                    relatorio.push({ id: idValue, status: 'erro', mensagem: erro, dados: dados, erro: erro });
-                    atualizarStatusPopup();
-                    return { sucesso: false, erro: erro };
-                }
-            } else {
-                await clickElement(abaMedicao, 'Aba Medição');
-            }
-            
-            // ===== PASSO 8: INSERIR MEDIÇÃO =====
-            const btnInserir = await waitForElement('//button[contains(text(), "Inserir Medição de Campo")]', 4000);
-            if (!btnInserir) {
-                const botoes = document.querySelectorAll('button');
-                let encontrado = null;
-                for (const btn of botoes) {
-                    if (btn.textContent.includes('Inserir Medição')) {
-                        encontrado = btn;
-                        break;
-                    }
-                }
-                if (encontrado) await clickElement(encontrado, 'Inserir');
-                else {
-                    const erro = 'Inserir não encontrado';
-                    relatorio.push({ id: idValue, status: 'erro', mensagem: erro, dados: dados, erro: erro });
-                    atualizarStatusPopup();
-                    return { sucesso: false, erro: erro };
-                }
-            } else {
-                await clickElement(btnInserir, 'Inserir');
-            }
-            
-            await wait(500);
-            
-            // ============================================
-            // PASSO 9: PREENCHER FORMULÁRIO
-            // ============================================
-            addLog('✏️ Preenchendo formulário...', 'info');
-            
-            // 1. PRANCHA
-            const inputPrancha = await waitForElement(CONFIG.xpaths.inputPrancha, 3000);
-            await preencherCampo(inputPrancha, prancha, 'Prancha');
-            
-            // 2. CLASSE
-            const selectClasse = await waitForElement(CONFIG.xpaths.selectClasse, 3000);
-            await preencherCampo(selectClasse, classe, 'Classe');
-            
-            // 3. MARACODE
-            if (maraCode) {
-                addLog(`🔢 Procurando campo MaraCode para inserir: "${maraCode}"`, 'info');
-                const inputMaraCode = await encontrarMaraCode();
+                await this.wait(500);
                 
-                if (inputMaraCode) {
-                    inputMaraCode.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    await wait(300);
-                    inputMaraCode.click();
-                    await wait(200);
-                    inputMaraCode.focus();
-                    await wait(200);
-                    
-                    inputMaraCode.value = '';
-                    await wait(100);
-                    inputMaraCode.value = String(maraCode);
-                    inputMaraCode.dispatchEvent(new Event('input', { bubbles: true }));
-                    inputMaraCode.dispatchEvent(new Event('change', { bubbles: true }));
-                    await wait(300);
-                    
-                    addLog(`⌨️ Pressionando Enter no MaraCode: ${maraCode}`, 'info');
-                    await pressionarEnter(inputMaraCode, 'MaraCode');
-                    
-                    const selectItem = await waitForElement(CONFIG.xpaths.selectItem, 3000);
-                    if (selectItem) {
-                        await aguardarPreenchimentoAutomatico(selectItem, '');
-                        addLog(`✅ Item preenchido automaticamente: "${selectItem.value}"`, 'success');
-                    }
-                    
-                    await aguardarExpansaoFormulario(classe);
-                } else {
-                    addLog(`❌ Campo MaraCode NÃO encontrado!`, 'error');
+                // ===== PASSO 2: LISTA REQUISIÇÕES =====
+                const listaElement = await this.waitForElement('//a[@routerlink="/requisicoes-eps"]', 5000);
+                if (!await this.clickElement(listaElement, 'Lista EPS')) {
+                    const erro = 'Lista não encontrada';
+                    this.dados.adicionarResultado(idValue, 'erro', erro, dados, erro);
+                    return { sucesso: false, erro: erro };
                 }
-            } else {
-                addLog(`⏭️ MaraCode vazio, pulando...`, 'info');
-            }
-            
-            // 4. QTD SERVIÇO EXECUTADO
-            const inputQtdServico = await waitForElement(CONFIG.xpaths.inputQtdServico, 3000);
-            if (inputQtdServico) {
-                await preencherQtdServico(inputQtdServico, qtdServico, 'Qtd Serviço Executado');
-            }
-            
-            // 5. PESQUISA MATERIAL
-            if (pesquisaMaterial) {
-                addLog(`🔍 Buscando campo Pesquisa Material para inserir: "${pesquisaMaterial}"`, 'info');
-                const inputPesquisa = await encontrarPesquisaMaterial();
                 
-                if (inputPesquisa) {
-                    await preencherPesquisaMaterial(inputPesquisa, pesquisaMaterial, 'Pesquisa Material');
-                } else {
-                    addLog(`❌ Campo Pesquisa Material NÃO encontrado!`, 'error');
-                    await wait(2000);
-                    
-                    const inputPesquisa2 = await encontrarPesquisaMaterial();
-                    if (inputPesquisa2) {
-                        await preencherPesquisaMaterial(inputPesquisa2, pesquisaMaterial, 'Pesquisa Material (2ª tentativa)');
-                    }
-                }
-            } else {
-                addLog(`⏭️ Pesquisa Material vazio, pulando...`, 'info');
-            }
-            
-            // 6. QTD MATERIAL
-            const inputQtdMaterial = await waitForElement(CONFIG.xpaths.inputQtdMaterial, 3000);
-            if (inputQtdMaterial) {
-                if (qtdMaterial && String(qtdMaterial) !== String(idValue)) {
-                    const valorConvertido = converterNumero(qtdMaterial);
-                    addLog(`📦 Preenchendo Qtd Material com: "${valorConvertido}" (original: "${qtdMaterial}")`, 'info');
-                    await preencherCampo(inputQtdMaterial, valorConvertido, 'Qtd Material');
-                } else {
-                    addLog(`⏭️ Qtd Material ignorado (vazio ou igual ao ID)`, 'info');
-                }
-            }
-            
-            // 7. LOCAL EXECUÇÃO OBRA - USANDO FUNÇÃO ESPECÍFICA
-            if (localObra) {
-                addLog(`📍 Buscando campo Local Execução Obra para inserir: "${localObra}"`, 'info');
-                const inputLocalObra = await encontrarLocalObra();
+                await this.wait(CONFIG.delayAposNavegacao);
                 
-                if (inputLocalObra) {
-                    await preencherLocalObraEspecifico(inputLocalObra, localObra, 'Local Execução Obra');
-                } else {
-                    addLog(`❌ Campo Local Execução Obra NÃO encontrado!`, 'error');
-                    await wait(2000);
-                    const inputLocalObra2 = await encontrarLocalObra();
-                    if (inputLocalObra2) {
-                        await preencherLocalObraEspecifico(inputLocalObra2, localObra, 'Local Execução Obra (2ª tentativa)');
+                // ===== PASSO 3: PREENCHER ID =====
+                const inputId = await this.waitForIdField();
+                if (!inputId) {
+                    const fallback = document.querySelector('#filtroId');
+                    if (fallback) {
+                        await this.preencherId(fallback, idValue);
                     } else {
-                        addLog(`❌ Falha ao encontrar Local Obra após 2 tentativas`, 'error');
+                        const erro = 'Campo ID não encontrado';
+                        this.dados.adicionarResultado(idValue, 'erro', erro, dados, erro);
+                        return { sucesso: false, erro: erro };
                     }
+                } else {
+                    await this.preencherId(inputId, idValue);
                 }
-            } else {
-                addLog(`⏭️ Local Execução Obra vazio, pulando...`, 'info');
-            }
-            
-            // ============================================
-            // PASSO 10: SALVAR
-            // ============================================
-            if (!CONFIG.modoTeste) {
-                let btnSalvar = document.querySelector('button.btn.btn-primary.mt-4.float-right');
-                if (!btnSalvar) btnSalvar = document.querySelector('button[type="submit"].btn-primary.float-right');
-                if (!btnSalvar) {
-                    const botoes = document.querySelectorAll('button');
-                    for (const btn of botoes) {
-                        if (btn.textContent.trim() === 'Salvar Medição') {
-                            btnSalvar = btn;
+                
+                // ===== PASSO 4: BUSCAR =====
+                const btnBuscar = await this.waitForElement('//a[contains(@class, "btn-primary") and contains(text(), "Buscar")]', 5000);
+                if (!btnBuscar) {
+                    const btnCSS = document.querySelector('.btn-primary.btn-sm.btn-block');
+                    if (btnCSS) await this.clickElement(btnCSS, 'Buscar');
+                    else {
+                        const erro = 'Botão Buscar não encontrado';
+                        this.dados.adicionarResultado(idValue, 'erro', erro, dados, erro);
+                        return { sucesso: false, erro: erro };
+                    }
+                } else {
+                    await this.clickElement(btnBuscar, 'Buscar');
+                }
+                
+                await this.wait(CONFIG.delayAposBusca);
+                
+                // ===== PASSO 5: EDITAR =====
+                const btnEditar = await this.waitForElement('//a[contains(@title, "Editar Requisição")]', 5000);
+                if (!btnEditar) {
+                    const btnCSS = document.querySelector('a[title="Editar Requisição"]');
+                    if (btnCSS) await this.clickElement(btnCSS, 'Editar');
+                    else {
+                        this.addLog(`⚠️ ID ${idValue} sem Editar`, 'warning');
+                        this.dados.adicionarResultado(idValue, 'pulado', 'Sem botão Editar', dados);
+                        return { sucesso: false, erro: 'Sem Editar', pulado: true };
+                    }
+                } else {
+                    await this.clickElement(btnEditar, 'Editar');
+                }
+                
+                // ===== PASSO 6: SERVIÇOS =====
+                const btnServico = await this.waitForElement('//a[contains(@title, "Serviços")]', 5000);
+                if (!btnServico) {
+                    const btnCSS = document.querySelector('a[title="Serviços"]');
+                    if (btnCSS) await this.clickElement(btnCSS, 'Serviços');
+                    else {
+                        const erro = 'Serviços não encontrado';
+                        this.dados.adicionarResultado(idValue, 'erro', erro, dados, erro);
+                        return { sucesso: false, erro: erro };
+                    }
+                } else {
+                    await this.clickElement(btnServico, 'Serviços');
+                }
+                
+                // ===== PASSO 7: ABA MEDIÇÃO =====
+                const abaMedicao = await this.waitForElement('//a[@role="tab" and contains(text(), "Medição de Campo")]', 5000);
+                if (!abaMedicao) {
+                    const abas = document.querySelectorAll('a[role="tab"]');
+                    let encontrada = null;
+                    for (const aba of abas) {
+                        if (aba.textContent.includes('Medição de Campo')) {
+                            encontrada = aba;
                             break;
                         }
                     }
+                    if (encontrada) await this.clickElement(encontrada, 'Aba Medição');
+                    else {
+                        const erro = 'Aba não encontrada';
+                        this.dados.adicionarResultado(idValue, 'erro', erro, dados, erro);
+                        return { sucesso: false, erro: erro };
+                    }
+                } else {
+                    await this.clickElement(abaMedicao, 'Aba Medição');
                 }
                 
-                if (btnSalvar) {
-                    btnSalvar.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    await wait(200);
-                    btnSalvar.click();
-                    addLog('💾 Salvando...', 'info');
-                    await wait(CONFIG.delayAposSalvar);
-                    
-                    const resultado = verificarMensagemRetorno();
-                    
-                    if (resultado) {
-                        if (resultado.status === 'sucesso') {
-                            relatorio.push({
-                                id: idValue,
-                                status: 'sucesso',
-                                mensagem: resultado.mensagem,
-                                dados: dados
-                            });
-                            addLog(`✅ ID ${idValue} cadastrado com sucesso!`, 'success');
-                        } else {
-                            relatorio.push({
-                                id: idValue,
-                                status: 'erro',
-                                mensagem: resultado.mensagem,
-                                dados: dados,
-                                erro: resultado.mensagem
-                            });
-                            addLog(`❌ ID ${idValue} falhou: ${resultado.mensagem}`, 'error');
+                // ===== PASSO 8: INSERIR MEDIÇÃO =====
+                const btnInserir = await this.waitForElement('//button[contains(text(), "Inserir Medição de Campo")]', 5000);
+                if (!btnInserir) {
+                    const botoes = document.querySelectorAll('button');
+                    let encontrado = null;
+                    for (const btn of botoes) {
+                        if (btn.textContent.includes('Inserir Medição')) {
+                            encontrado = btn;
+                            break;
                         }
-                    } else {
-                        addLog(`⚠️ Nenhuma mensagem de retorno para ID ${idValue}`, 'warning');
-                        relatorio.push({
-                            id: idValue,
-                            status: 'sucesso',
-                            mensagem: 'Cadastro realizado (sem confirmação)',
-                            dados: dados
-                        });
                     }
+                    if (encontrado) await this.clickElement(encontrado, 'Inserir');
+                    else {
+                        const erro = 'Inserir não encontrado';
+                        this.dados.adicionarResultado(idValue, 'erro', erro, dados, erro);
+                        return { sucesso: false, erro: erro };
+                    }
+                } else {
+                    await this.clickElement(btnInserir, 'Inserir');
+                }
+                
+                await this.wait(1000);
+                
+                // ============================================
+                // PASSO 9: PREENCHER FORMULÁRIO
+                // ============================================
+                this.addLog(`✏️ Preenchendo formulário para ID ${idValue}`, 'info');
+                
+                // 1. PRANCHA
+                const inputPrancha = await this.waitForElement(CONFIG.xpaths.inputPrancha, 5000);
+                await this.preencherCampo(inputPrancha, dadosCompletos.prancha, 'Prancha');
+                
+                // 2. CLASSE
+                const selectClasse = await this.waitForElement(CONFIG.xpaths.selectClasse, 5000);
+                await this.preencherCampo(selectClasse, dadosCompletos.classe, 'Classe');
+                
+                // 3. MARACODE
+                if (dadosCompletos.maraCode) {
+                    const inputMaraCode = await this.encontrarMaraCode();
                     
-                    atualizarStatusPopup();
+                    if (inputMaraCode) {
+                        inputMaraCode.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        await this.wait(500);
+                        inputMaraCode.click();
+                        await this.wait(300);
+                        inputMaraCode.focus();
+                        await this.wait(300);
+                        
+                        inputMaraCode.value = '';
+                        await this.wait(200);
+                        inputMaraCode.value = String(dadosCompletos.maraCode);
+                        inputMaraCode.dispatchEvent(new Event('input', { bubbles: true }));
+                        inputMaraCode.dispatchEvent(new Event('change', { bubbles: true }));
+                        await this.wait(500);
+                        
+                        await this.pressionarEnter(inputMaraCode, 'MaraCode');
+                        
+                        const selectItem = await this.waitForElement(CONFIG.xpaths.selectItem, 5000);
+                        if (selectItem) {
+                            await this.aguardarPreenchimentoAutomatico(selectItem, '');
+                            this.addLog(`✅ Item preenchido automaticamente: "${selectItem.value}"`, 'success');
+                        }
+                        
+                        await this.aguardarExpansaoFormulario(dadosCompletos.classe);
+                    }
+                }
+                
+                // 4. QTD SERVIÇO EXECUTADO
+                const inputQtdServico = await this.waitForElement(CONFIG.xpaths.inputQtdServico, 5000);
+                if (inputQtdServico) {
+                    await this.preencherQtdServico(inputQtdServico, dadosCompletos.qtdServico, 'Qtd Serviço Executado');
+                }
+                
+                // 5. PESQUISA MATERIAL - SOMENTE PARA MATERIAIS
+                if (dadosCompletos.isMaterial && dadosCompletos.pesquisaMaterial) {
+                    this.addLog(`🔍 Buscando Pesquisa Material: "${dadosCompletos.pesquisaMaterial}"`, 'info');
+                    const inputPesquisa = await this.encontrarPesquisaMaterial();
                     
-                    // ===== FECHAR =====
-                    let btnFechar = document.querySelector('button.btn.btn-secondary.mt-4.float-left');
-                    if (!btnFechar) {
+                    if (inputPesquisa) {
+                        await this.preencherPesquisaMaterial(inputPesquisa, dadosCompletos.pesquisaMaterial, 'Pesquisa Material');
+                    } else {
+                        this.addLog(`❌ Pesquisa Material NÃO encontrado!`, 'error');
+                        await this.wait(3000);
+                        const inputPesquisa2 = await this.encontrarPesquisaMaterial();
+                        if (inputPesquisa2) {
+                            await this.preencherPesquisaMaterial(inputPesquisa2, dadosCompletos.pesquisaMaterial, 'Pesquisa Material (2ª)');
+                        }
+                    }
+                } else if (dadosCompletos.isMaterial) {
+                    this.addLog(`⚠️ MATERIAL sem Pesquisa Material!`, 'warning');
+                } else {
+                    this.addLog(`⏭️ Serviço - pulando Pesquisa Material`, 'info');
+                }
+                
+                // 6. QTD MATERIAL - SOMENTE PARA MATERIAIS
+                const inputQtdMaterial = await this.waitForElement(CONFIG.xpaths.inputQtdMaterial, 5000);
+                if (inputQtdMaterial && dadosCompletos.isMaterial) {
+                    if (dadosCompletos.qtdMaterial && String(dadosCompletos.qtdMaterial) !== String(idValue) && String(dadosCompletos.qtdMaterial) !== '') {
+                        const valorConvertido = this.converterNumero(dadosCompletos.qtdMaterial);
+                        this.addLog(`📦 Qtd Material: "${valorConvertido}" (original: "${dadosCompletos.qtdMaterial}")`, 'info');
+                        await this.preencherCampo(inputQtdMaterial, valorConvertido, 'Qtd Material');
+                    } else {
+                        this.addLog(`⏭️ Qtd Material ignorado (vazio ou igual ao ID)`, 'info');
+                    }
+                } else if (!dadosCompletos.isMaterial) {
+                    this.addLog(`⏭️ Serviço - pulando Qtd Material`, 'info');
+                }
+                
+                // 7. LOCAL EXECUÇÃO OBRA
+                if (dadosCompletos.localObra) {
+                    this.addLog(`📍 Buscando Local Obra: "${dadosCompletos.localObra}"`, 'info');
+                    const inputLocalObra = await this.encontrarLocalObra();
+                    
+                    if (inputLocalObra) {
+                        await this.preencherLocalObraEspecifico(inputLocalObra, dadosCompletos.localObra, 'Local Execução Obra');
+                    } else {
+                        this.addLog(`❌ Local Obra NÃO encontrado!`, 'error');
+                        await this.wait(3000);
+                        const inputLocalObra2 = await this.encontrarLocalObra();
+                        if (inputLocalObra2) {
+                            await this.preencherLocalObraEspecifico(inputLocalObra2, dadosCompletos.localObra, 'Local Obra (2ª)');
+                        }
+                    }
+                } else {
+                    this.addLog(`⏭️ Local Obra vazio, pulando...`, 'info');
+                }
+                
+                // ============================================
+                // PASSO 10: SALVAR
+                // ============================================
+                if (!CONFIG.modoTeste) {
+                    let btnSalvar = document.querySelector('button.btn.btn-primary.mt-4.float-right');
+                    if (!btnSalvar) btnSalvar = document.querySelector('button[type="submit"].btn-primary.float-right');
+                    if (!btnSalvar) {
                         const botoes = document.querySelectorAll('button');
                         for (const btn of botoes) {
-                            if (btn.textContent.trim() === 'Fechar' || btn.textContent.includes('Fechar')) {
-                                btnFechar = btn;
+                            if (btn.textContent.trim() === 'Salvar Medição') {
+                                btnSalvar = btn;
                                 break;
                             }
                         }
                     }
                     
-                    if (btnFechar) {
-                        btnFechar.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        await wait(200);
-                        btnFechar.click();
-                        await wait(CONFIG.delayAposFechar);
-                    }
-                    
-                } else {
-                    const erro = 'Botão Salvar não encontrado';
-                    relatorio.push({ id: idValue, status: 'erro', mensagem: erro, dados: dados, erro: erro });
-                    atualizarStatusPopup();
-                    return { sucesso: false, erro: erro };
-                }
-            } else {
-                addLog(`🧪 TESTE: ID ${idValue} simulado`, 'success');
-                relatorio.push({
-                    id: idValue,
-                    status: 'sucesso',
-                    mensagem: 'TESTE - Cadastro simulado',
-                    dados: dados
-                });
-                atualizarStatusPopup();
-                await wait(1000);
-            }
-            
-            return { sucesso: true };
-            
-        } catch (error) {
-            const erroMsg = error.message || 'Erro desconhecido';
-            addLog(`❌ ID ${idValue}: ${erroMsg}`, 'error');
-            relatorio.push({
-                id: idValue,
-                status: 'erro',
-                mensagem: erroMsg,
-                dados: dados,
-                erro: erroMsg
-            });
-            atualizarStatusPopup();
-            return { sucesso: false, erro: erroMsg };
-        }
-    }
-    
-    async function executarTodosCadastros() {
-        if (estaExecutando) {
-            addLog('⚠️ Já está executando!', 'warning');
-            return;
-        }
-        if (dadosParaCadastrar.length === 0) {
-            addLog('⚠️ Nenhum dado para cadastrar!', 'error');
-            return;
-        }
-        
-        estaExecutando = true;
-        podeParar = false;
-        cadastroAtual = 0;
-        relatorio = [];
-        contadores = { sucessos: 0, erros: 0, pulados: 0 };
-        
-        addLog(`🚀 Iniciando ${dadosParaCadastrar.length} cadastros`, 'info');
-        addLog(`📋 Modo: ${CONFIG.modoTeste ? 'TESTE' : 'PRODUÇÃO'}`, 'info');
-        
-        const logContainer = document.getElementById('auto-log');
-        if (logContainer) logContainer.innerHTML = '';
-        
-        for (let i = 0; i < dadosParaCadastrar.length; i++) {
-            if (podeParar) {
-                addLog('⏹️ Interrompido', 'warning');
-                break;
-            }
-            
-            cadastroAtual = i + 1;
-            const dados = dadosParaCadastrar[i];
-            const idExibicao = dados['ID'] || dados['id'] || dados['Id'] || i + 1;
-            
-            addLog(`📌 ${cadastroAtual}/${dadosParaCadastrar.length} - ID: ${idExibicao}`, 'info');
-            atualizarProgresso(cadastroAtual, dadosParaCadastrar.length);
-            
-            try {
-                await executarCadastro(dados, i);
-            } catch (error) {
-                addLog(`❌ Erro: ${error.message}`, 'error');
-                relatorio.push({
-                    id: idExibicao,
-                    status: 'erro',
-                    mensagem: error.message,
-                    dados: dados,
-                    erro: error.message
-                });
-                atualizarStatusPopup();
-            }
-            
-            if (i < dadosParaCadastrar.length - 1 && !podeParar) {
-                await wait(CONFIG.delayEntreCadastros);
-            }
-        }
-        
-        estaExecutando = false;
-        
-        const sucessos = relatorio.filter(r => r.status === 'sucesso').length;
-        const erros = relatorio.filter(r => r.status === 'erro').length;
-        const pulados = relatorio.filter(r => r.status === 'pulado').length;
-        
-        addLog(`✅ Finalizado! ${sucessos} sucessos, ${erros} erros, ${pulados} pulados`, 'success');
-        addLog(`📊 Relatório gerado com ${relatorio.length} registros`, 'info');
-        
-        document.getElementById('popup-btn-iniciar').disabled = false;
-        document.getElementById('popup-btn-parar').disabled = true;
-        document.getElementById('popup-btn-relatorio').disabled = false;
-        
-        atualizarStatusPopup();
-        mostrarAlertaFinalizacao();
-    }
-    
-    function atualizarProgresso(atual, total) {
-        const progresso = document.getElementById('auto-progresso');
-        if (!progresso) return;
-        const percentual = Math.round((atual / total) * 100);
-        progresso.style.width = `${percentual}%`;
-        progresso.textContent = `${percentual}% (${atual}/${total})`;
-    }
-    
-    // ===== CRIA O BOTÃO NA PÁGINA =====
-    function criarBotaoInput() {
-        const usernameSpan = document.getElementById('ott-username');
-        if (!usernameSpan) {
-            setTimeout(criarBotaoInput, 1000);
-            return;
-        }
-        
-        if (document.getElementById('btn-input-servico')) return;
-        
-        const container = document.createElement('span');
-        container.className = 'input-servico-container';
-        container.style.cssText = `
-            display: inline-flex;
-            align-items: center;
-            margin-left: 12px;
-            gap: 8px;
-        `;
-        
-        const botao = document.createElement('button');
-        botao.id = 'btn-input-servico';
-        botao.className = 'btn-auto-import';
-        botao.textContent = '📥 Input Serviço/Materiais';
-        botao.title = 'Clique para abrir o painel de automação';
-        botao.style.cssText = `
-            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-            color: white !important;
-            border: none !important;
-            padding: 6px 16px !important;
-            border-radius: 4px !important;
-            font-size: 13px !important;
-            font-weight: 500 !important;
-            cursor: pointer !important;
-            transition: all 0.3s ease !important;
-            display: inline-flex !important;
-            align-items: center !important;
-            gap: 6px !important;
-            box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3) !important;
-            height: 32px !important;
-            line-height: 1 !important;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-        `;
-        
-        botao.addEventListener('mouseenter', function() {
-            this.style.transform = 'translateY(-1px)';
-            this.style.boxShadow = '0 4px 12px rgba(40, 167, 69, 0.4)';
-        });
-        
-        botao.addEventListener('mouseleave', function() {
-            this.style.transform = 'translateY(0)';
-            this.style.boxShadow = '0 2px 4px rgba(40, 167, 69, 0.3)';
-        });
-        
-        botao.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            togglePopup();
-        });
-        
-        container.appendChild(botao);
-        usernameSpan.parentNode.insertBefore(container, usernameSpan.nextSibling);
-        console.log('✅ Botão "Input Serviço/Materiais" adicionado!');
-    }
-    
-    // ===== POPUP =====
-    function criarPopup() {
-        const popupExistente = document.getElementById('auto-popup');
-        if (popupExistente) popupExistente.remove();
-        
-        const popup = document.createElement('div');
-        popup.id = 'auto-popup';
-        popup.style.cssText = `
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 10000;
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-            min-width: 480px;
-            max-width: 600px;
-            max-height: 85vh;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            border: 1px solid #e0e0e0;
-            display: none;
-            flex-direction: column;
-            animation: popupFadeIn 0.3s ease;
-        `;
-        
-        popup.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid #e9ecef;">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <span style="font-size: 22px;">⚡</span>
-                    <h3 style="margin: 0; color: #212529; font-size: 16px;">Automação Serviços</h3>
-                </div>
-                <button id="btn-fechar-popup" style="
-                    background: none;
-                    border: none;
-                    font-size: 22px;
-                    cursor: pointer;
-                    color: #6c757d;
-                    padding: 0 6px;
-                    transition: all 0.3s ease;
-                    line-height: 1;
-                " title="Fechar">✕</button>
-            </div>
-            
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px; padding: 8px 12px; background: #f8f9fa; border-radius: 6px; border: 1px solid #e9ecef;">
-                <span class="status-indicator" id="popup-status-indicator" style="
-                    display: inline-block;
-                    width: 8px;
-                    height: 8px;
-                    border-radius: 50%;
-                    background: #28a745;
-                "></span>
-                <span id="popup-status-text" style="color: #495057; font-weight: 500;">Pronto</span>
-                <span style="margin-left: auto; color: #6c757d; font-size: 11px;" id="popup-tempo-estimado"></span>
-            </div>
-            
-            <div id="popup-upload-area" style="
-                border: 2px dashed #dee2e6;
-                border-radius: 6px;
-                padding: 15px;
-                text-align: center;
-                cursor: pointer;
-                transition: all 0.3s ease;
-                background: #f8f9fa;
-                margin-bottom: 10px;
-            ">
-                <div style="font-size: 28px; margin-bottom: 4px;">📊</div>
-                <div style="font-size: 13px; color: #495057;">
-                    <strong>Clique</strong> ou arraste seu Excel
-                </div>
-                <div style="font-size: 11px; color: #6c757d;">.xlsx, .xls, .csv</div>
-                <input type="file" id="popup-file-input" accept=".xlsx,.xls,.csv" style="display:none">
-            </div>
-            
-            <div id="popup-file-info" style="
-                background: #f8fff9;
-                padding: 6px 12px;
-                border-radius: 4px;
-                border-left: 3px solid #28a745;
-                display: none;
-                margin-bottom: 8px;
-                font-size: 12px;
-            ">
-                <span id="popup-file-name" style="font-weight: 500;">arquivo.xlsx</span>
-                <span id="popup-file-size" style="color: #6c757d; margin-left: 8px;">0 KB</span>
-                <span id="popup-file-rows" style="color: #28a745; margin-left: 8px;">0 linhas</span>
-            </div>
-            
-            <div id="popup-preview" style="
-                max-height: 100px;
-                overflow: auto;
-                background: white;
-                border-radius: 4px;
-                border: 1px solid #e9ecef;
-                padding: 6px;
-                display: none;
-                margin-bottom: 8px;
-                font-size: 11px;
-            ">
-                <div id="popup-preview-content"></div>
-            </div>
-            
-            <div id="popup-stats" style="
-                display: none;
-                gap: 8px;
-                padding: 6px 10px;
-                background: white;
-                border-radius: 4px;
-                border: 1px solid #e9ecef;
-                margin-bottom: 8px;
-            ">
-                <div style="display: flex; gap: 8px; font-size: 12px;">
-                    <div style="flex:1;text-align:center;">
-                        <span style="font-weight:600;color:#28a745;" id="popup-total-rows">0</span>
-                        <span style="color:#6c757d;"> registros</span>
-                    </div>
-                    <div style="flex:1;text-align:center;">
-                        <span style="font-weight:600;color:#28a745;" id="popup-total-cols">0</span>
-                        <span style="color:#6c757d;"> campos</span>
-                    </div>
-                </div>
-            </div>
-            
-            <div style="margin-bottom: 8px;">
-                <div style="height:20px;background:#e9ecef;border-radius:4px;overflow:hidden;">
-                    <div id="auto-progresso" style="width:0%;height:100%;background:#28a745;transition:width 0.3s;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:bold;">0%</div>
-                </div>
-            </div>
-            
-            <div id="auto-log" style="
-                flex: 1;
-                overflow-y: auto;
-                font-size: 11px;
-                background: #f8f9fa;
-                border-radius: 4px;
-                padding: 6px;
-                margin-bottom: 8px;
-                min-height: 80px;
-                max-height: 150px;
-                font-family: monospace;
-                border: 1px solid #e9ecef;
-            ">
-                <div style="color:#6c757d;">Aguardando início...</div>
-            </div>
-            
-            <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px;">
-                <button id="popup-btn-iniciar" style="flex:1;padding:6px 10px;background:#28a745;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;transition:all 0.3s;" disabled>▶️ Iniciar</button>
-                <button id="popup-btn-parar" style="flex:1;padding:6px 10px;background:#dc3545;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;transition:all 0.3s;" disabled>⏹️ Parar</button>
-                <button id="popup-btn-limpar" style="flex:0 0 auto;padding:6px 10px;background:#6c757d;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;" title="Limpar dados">🗑️</button>
-            </div>
-            
-            <div style="display: flex; gap: 6px; margin-bottom: 6px;">
-                <button id="popup-btn-relatorio" style="flex:1;padding:6px 10px;background:#17a2b8;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;transition:all 0.3s;" disabled>📊 Relatório</button>
-                <button id="popup-btn-exportar-log" style="flex:1;padding:6px 10px;background:#6c757d;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;transition:all 0.3s;">📥 Exportar Log</button>
-            </div>
-            
-            <div style="display:flex;gap:8px;font-size:11px;color:#6c757d;align-items:center;margin-bottom:4px;">
-                <span id="popup-info-cadastros">0 carregados</span>
-                <label style="margin-left:auto;display:flex;align-items:center;gap:4px;cursor:pointer;">
-                    <input type="checkbox" id="popup-modo-teste" ${CONFIG.modoTeste ? 'checked' : ''}>
-                    Modo Teste
-                </label>
-            </div>
-        `;
-        
-        document.body.appendChild(popup);
-        
-        if (!document.getElementById('popup-styles')) {
-            const style = document.createElement('style');
-            style.id = 'popup-styles';
-            style.textContent = `
-                @keyframes popupFadeIn {
-                    from { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
-                    to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-                }
-                .log-entry { padding: 2px 4px; border-bottom: 1px solid #f1f3f5; font-size: 10px; }
-                .log-success { color: #28a745; }
-                .log-error { color: #dc3545; }
-                .log-warning { color: #ffc107; }
-                .log-info { color: #17a2b8; }
-                #popup-upload-area:hover { border-color: #28a745; background: #f0fff4; }
-                #popup-upload-area.dragover { border-color: #28a745; background: #f0fff4; }
-                #popup-preview::-webkit-scrollbar, #auto-log::-webkit-scrollbar { width: 4px; }
-                #popup-preview::-webkit-scrollbar-track, #auto-log::-webkit-scrollbar-track { background: #f1f1f1; border-radius:2px; }
-                #popup-preview::-webkit-scrollbar-thumb, #auto-log::-webkit-scrollbar-thumb { background: #888; border-radius:2px; }
-            `;
-            document.head.appendChild(style);
-        }
-        
-        configurarEventosPopup();
-        return popup;
-    }
-    
-    function configurarEventosPopup() {
-        document.getElementById('btn-fechar-popup').addEventListener('click', fecharPopup);
-        
-        const uploadArea = document.getElementById('popup-upload-area');
-        const fileInput = document.getElementById('popup-file-input');
-        
-        uploadArea.addEventListener('click', () => fileInput.click());
-        
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.classList.add('dragover');
-        });
-        
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
-        });
-        
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                fileInput.files = files;
-                fileInput.dispatchEvent(new Event('change'));
-            }
-        });
-        
-        fileInput.addEventListener('change', function(e) {
-            const file = this.files[0];
-            if (!file) return;
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const jsonData = XLSX.utils.sheet_to_json(firstSheet);
-                    
-                    document.getElementById('popup-file-name').textContent = file.name;
-                    document.getElementById('popup-file-size').textContent = (file.size / 1024).toFixed(1) + ' KB';
-                    document.getElementById('popup-file-rows').textContent = jsonData.length + ' linhas';
-                    document.getElementById('popup-file-info').style.display = 'block';
-                    
-                    const mapeamento = detectarColunas(jsonData);
-                    const dadosMapeados = jsonData.map(row => {
-                        const novoRow = {};
-                        for (const [campo, coluna] of Object.entries(mapeamento || {})) {
-                            novoRow[campo] = row[coluna] || '';
+                    if (btnSalvar) {
+                        btnSalvar.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        await this.wait(500);
+                        btnSalvar.click();
+                        this.addLog(`💾 Salvando ID ${idValue}...`, 'info');
+                        await this.wait(CONFIG.delayAposSalvar);
+                        
+                        const resultado = this.verificarMensagemRetorno();
+                        
+                        if (resultado) {
+                            if (resultado.status === 'sucesso') {
+                                this.dados.adicionarResultado(idValue, 'sucesso', resultado.mensagem, dados);
+                                this.addLog(`✅ ID ${idValue} SUCESSO!`, 'success');
+                            } else {
+                                this.dados.adicionarResultado(idValue, 'erro', resultado.mensagem, dados, resultado.mensagem);
+                                this.addLog(`❌ ID ${idValue} falhou: ${resultado.mensagem}`, 'error');
+                            }
+                        } else {
+                            this.addLog(`⚠️ Sem retorno para ID ${idValue}`, 'warning');
+                            this.dados.adicionarResultado(idValue, 'sucesso', 'Cadastro realizado (sem confirmação)', dados);
                         }
-                        return novoRow;
-                    });
-                    processarDadosPopup(dadosMapeados);
-                } catch (error) {
-                    setStatusPopup('❌ Erro: ' + error.message, 'error');
+                        
+                        // ===== FECHAR =====
+                        let btnFechar = document.querySelector('button.btn.btn-secondary.mt-4.float-left');
+                        if (!btnFechar) {
+                            const botoes = document.querySelectorAll('button');
+                            for (const btn of botoes) {
+                                if (btn.textContent.trim() === 'Fechar' || btn.textContent.includes('Fechar')) {
+                                    btnFechar = btn;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if (btnFechar) {
+                            btnFechar.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            await this.wait(500);
+                            btnFechar.click();
+                            await this.wait(CONFIG.delayAposFechar);
+                        }
+                        
+                    } else {
+                        const erro = 'Botão Salvar não encontrado';
+                        this.dados.adicionarResultado(idValue, 'erro', erro, dados, erro);
+                        return { sucesso: false, erro: erro };
+                    }
+                } else {
+                    this.addLog(`🧪 TESTE: ID ${idValue} simulado`, 'success');
+                    this.dados.adicionarResultado(idValue, 'sucesso', 'TESTE - Cadastro simulado', dados);
+                    await this.wait(2000);
                 }
-            };
-            reader.readAsArrayBuffer(file);
-        });
-        
-        document.getElementById('popup-btn-iniciar').addEventListener('click', () => {
-            if (dadosParaCadastrar.length > 0) {
-                executarTodosCadastros();
-                document.getElementById('popup-btn-iniciar').disabled = true;
-                document.getElementById('popup-btn-parar').disabled = false;
-                document.getElementById('popup-btn-relatorio').disabled = true;
-            } else {
-                addLog('⚠️ Importe um arquivo primeiro!', 'error');
-            }
-        });
-        
-        document.getElementById('popup-btn-parar').addEventListener('click', () => {
-            podeParar = true;
-            document.getElementById('popup-btn-parar').disabled = true;
-            document.getElementById('popup-btn-iniciar').disabled = false;
-            addLog('⏹️ Parando...', 'warning');
-        });
-        
-        document.getElementById('popup-btn-limpar').addEventListener('click', () => {
-            dadosParaCadastrar = [];
-            cadastroAtual = 0;
-            relatorio = [];
-            contadores = { sucessos: 0, erros: 0, pulados: 0 };
-            atualizarProgresso(0, 1);
-            document.getElementById('popup-info-cadastros').textContent = '0 carregados';
-            document.getElementById('popup-status-text').textContent = 'Pronto';
-            document.getElementById('popup-status-text').style.color = '#495057';
-            document.getElementById('auto-log').innerHTML = '<div style="color:#6c757d;">Dados limpos</div>';
-            document.getElementById('popup-file-info').style.display = 'none';
-            document.getElementById('popup-preview').style.display = 'none';
-            document.getElementById('popup-stats').style.display = 'none';
-            document.getElementById('popup-btn-iniciar').disabled = true;
-            document.getElementById('popup-btn-relatorio').disabled = true;
-            addLog('🗑️ Dados limpos!', 'info');
-            chrome.storage.local.remove('dadosUltimos');
-        });
-        
-        document.getElementById('popup-btn-relatorio').addEventListener('click', () => {
-            baixarRelatorio();
-        });
-        
-        document.getElementById('popup-btn-exportar-log').addEventListener('click', () => {
-            const logText = log.map(entry => 
-                `[${entry.timestamp}] ${entry.mensagem}`
-            ).join('\n');
-            
-            let textoCompleto = logText;
-            if (relatorio.length > 0) {
-                const sucessos = relatorio.filter(r => r.status === 'sucesso').length;
-                const erros = relatorio.filter(r => r.status === 'erro').length;
-                const pulados = relatorio.filter(r => r.status === 'pulado').length;
                 
-                textoCompleto += '\n\n========================================\n';
-                textoCompleto += 'RESUMO DO RELATÓRIO:\n';
-                textoCompleto += '========================================\n';
-                textoCompleto += `✅ Sucessos: ${sucessos}\n`;
-                textoCompleto += `❌ Erros: ${erros}\n`;
-                textoCompleto += `⏭️ Pulados: ${pulados}\n`;
-                textoCompleto += `📊 Total: ${relatorio.length}\n`;
+                this.addLog(`📝 === CADASTRO ${index + 1} FINALIZADO ===`, 'info');
+                return { sucesso: true };
+                
+            } catch (error) {
+                const erroMsg = error.message || 'Erro desconhecido';
+                this.addLog(`❌ ID ${idValue}: ${erroMsg}`, 'error');
+                this.dados.adicionarResultado(idValue, 'erro', erroMsg, dados, erroMsg);
+                return { sucesso: false, erro: erroMsg };
+            }
+        }
+        
+        async executarTodosCadastros() {
+            if (this.estaExecutando) {
+                this.addLog('⚠️ Já está executando!', 'warning');
+                return;
+            }
+            if (this.dados.totalRegistros === 0) {
+                this.addLog('⚠️ Nenhum dado para cadastrar!', 'error');
+                return;
             }
             
-            const blob = new Blob([textoCompleto], { type: 'text/plain;charset=utf-8' });
+            this.estaExecutando = true;
+            this.podeParar = false;
+            this.dados.indiceAtual = 0;
+            this.dados.relatorio = [];
+            this.dados.contadores = { sucessos: 0, erros: 0, pulados: 0 };
+            
+            this.addLog(`🚀 === INICIANDO AUTOMAÇÃO ===`, 'info');
+            this.addLog(`📋 Total de registros: ${this.dados.totalRegistros}`, 'info');
+            this.addLog(`📋 Modo: ${CONFIG.modoTeste ? 'TESTE' : 'PRODUÇÃO'}`, 'info');
+            
+            const logContainer = document.getElementById('auto-log');
+            if (logContainer) logContainer.innerHTML = '';
+            
+            for (let i = 0; i < this.dados.totalRegistros; i++) {
+                if (this.podeParar) {
+                    this.addLog('⏹️ Interrompido pelo usuário', 'warning');
+                    break;
+                }
+                
+                const dados = this.dados.registros[i];
+                const idExibicao = dados['ID'] || dados['id'] || dados['Id'] || i + 1;
+                
+                this.addLog(`📌 === CADASTRO ${i + 1}/${this.dados.totalRegistros} ===`, 'info');
+                this.atualizarProgresso(i + 1, this.dados.totalRegistros);
+                
+                try {
+                    await this.executarCadastro(dados, i);
+                } catch (error) {
+                    this.addLog(`❌ Erro: ${error.message}`, 'error');
+                    this.dados.adicionarResultado(idExibicao, 'erro', error.message, dados, error.message);
+                }
+                
+                if (i < this.dados.totalRegistros - 1 && !this.podeParar) {
+                    this.addLog(`⏳ Aguardando ${CONFIG.delayEntreCadastros}ms...`, 'info');
+                    await this.wait(CONFIG.delayEntreCadastros);
+                }
+            }
+            
+            this.estaExecutando = false;
+            
+            this.addLog(`✅ === AUTOMAÇÃO FINALIZADA ===`, 'success');
+            this.addLog(`📊 Resultado: ${this.dados.contadores.sucessos} sucessos, ${this.dados.contadores.erros} erros, ${this.dados.contadores.pulados} pulados`, 'info');
+            this.addLog(`📊 Relatório gerado com ${this.dados.relatorio.length} registros`, 'info');
+            
+            document.getElementById('popup-btn-iniciar').disabled = false;
+            document.getElementById('popup-btn-parar').disabled = true;
+            document.getElementById('popup-btn-relatorio').disabled = false;
+            
+            this.atualizarStatusPopup();
+            this.mostrarAlertaFinalizacao();
+        }
+        
+        atualizarProgresso(atual, total) {
+            const progresso = document.getElementById('auto-progresso');
+            if (!progresso) return;
+            const percentual = Math.round((atual / total) * 100);
+            progresso.style.width = `${percentual}%`;
+            progresso.textContent = `${percentual}% (${atual}/${total})`;
+        }
+        
+        atualizarStatusPopup() {
+            const statusText = document.getElementById('popup-status-text');
+            if (statusText) {
+                const total = this.dados.relatorio.length;
+                const sucessos = this.dados.contadores.sucessos;
+                const erros = this.dados.contadores.erros;
+                const pulados = this.dados.contadores.pulados;
+                if (total > 0) {
+                    statusText.textContent = `✅ ${sucessos} OK | ❌ ${erros} ERRO | ⏭️ ${pulados} PULADO`;
+                    statusText.style.color = erros > 0 ? '#dc3545' : '#28a745';
+                }
+            }
+        }
+        
+        mostrarAlertaFinalizacao() {
+            const sucessos = this.dados.contadores.sucessos;
+            const erros = this.dados.contadores.erros;
+            const pulados = this.dados.contadores.pulados;
+            const total = this.dados.relatorio.length;
+            
+            const alerta = document.createElement('div');
+            alerta.style.cssText = `
+                position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                z-index: 99999; background: white; padding: 30px 40px; border-radius: 12px;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.3); min-width: 400px; max-width: 500px;
+                text-align: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                animation: alertaFadeIn 0.4s ease;
+            `;
+            
+            const icon = erros > 0 ? '⚠️' : '✅';
+            const cor = erros > 0 ? '#dc3545' : '#28a745';
+            const titulo = erros > 0 ? 'Processo Finalizado com Alertas!' : 'Processo Finalizado com Sucesso!';
+            
+            alerta.innerHTML = `
+                <div style="font-size: 48px; margin-bottom: 10px;">${icon}</div>
+                <h2 style="color: ${cor}; margin: 0 0 15px 0; font-size: 22px;">${titulo}</h2>
+                <div style="display: flex; gap: 15px; justify-content: center; margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                    <div><div style="font-size: 28px; font-weight: 600; color: #28a745;">${sucessos}</div><div style="font-size: 12px; color: #6c757d;">✅ Sucessos</div></div>
+                    <div><div style="font-size: 28px; font-weight: 600; color: #dc3545;">${erros}</div><div style="font-size: 12px; color: #6c757d;">❌ Erros</div></div>
+                    <div><div style="font-size: 28px; font-weight: 600; color: #ffc107;">${pulados}</div><div style="font-size: 12px; color: #6c757d;">⏭️ Pulados</div></div>
+                    <div><div style="font-size: 28px; font-weight: 600; color: #17a2b8;">${total}</div><div style="font-size: 12px; color: #6c757d;">📊 Total</div></div>
+                </div>
+                <div style="font-size: 13px; color: #6c757d; margin-bottom: 15px;">Clique em "Ver Relatório" para detalhes</div>
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button id="btn-alerta-fechar" style="padding: 8px 25px; background: #6c757d; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">Fechar</button>
+                    <button id="btn-alerta-relatorio" style="padding: 8px 25px; background: #17a2b8; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">📊 Ver Relatório</button>
+                </div>
+            `;
+            document.body.appendChild(alerta);
+            
+            if (!document.getElementById('alerta-styles')) {
+                const style = document.createElement('style');
+                style.id = 'alerta-styles';
+                style.textContent = `@keyframes alertaFadeIn { from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }`;
+                document.head.appendChild(style);
+            }
+            
+            const overlay = document.createElement('div');
+            overlay.id = 'alerta-overlay';
+            overlay.style.cssText = `position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 99998; animation: alertaFadeIn 0.3s ease;`;
+            document.body.appendChild(overlay);
+            
+            document.getElementById('btn-alerta-fechar').addEventListener('click', () => { alerta.remove(); overlay.remove(); });
+            document.getElementById('btn-alerta-relatorio').addEventListener('click', () => { alerta.remove(); overlay.remove(); this.baixarRelatorio(); });
+            overlay.addEventListener('click', () => { alerta.remove(); overlay.remove(); });
+        }
+        
+        baixarRelatorio() {
+            const relatorioTexto = this.dados.gerarRelatorio();
+            if (!relatorioTexto) return;
+            const blob = new Blob([relatorioTexto], { type: 'text/plain;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `log_completo_${new Date().toISOString().slice(0,10)}.txt`;
+            a.download = `relatorio_cadastro_${new Date().toISOString().slice(0,10)}.txt`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            addLog('📥 Log exportado!', 'success');
-        });
-        
-        document.getElementById('popup-modo-teste').addEventListener('change', function() {
-            CONFIG.modoTeste = this.checked;
-            addLog(`🧪 Modo teste ${this.checked ? 'ativado' : 'desativado'}`, 'info');
-            chrome.storage.local.set({ modoTeste: this.checked });
-        });
-    }
-    
-    function togglePopup() {
-        const popup = document.getElementById('auto-popup');
-        if (!popup) {
-            criarPopup();
-            setTimeout(() => {
-                const newPopup = document.getElementById('auto-popup');
-                if (newPopup) newPopup.style.display = 'flex';
-            }, 100);
-        } else {
-            popup.style.display = popup.style.display === 'none' ? 'flex' : 'none';
-        }
-    }
-    
-    function fecharPopup() {
-        const popup = document.getElementById('auto-popup');
-        if (popup) popup.style.display = 'none';
-    }
-    
-    function setStatusPopup(texto, tipo = 'ready') {
-        const indicator = document.getElementById('popup-status-indicator');
-        const text = document.getElementById('popup-status-text');
-        if (text) text.textContent = texto;
-        if (indicator) {
-            const cores = { ready: '#28a745', running: '#ffc107', error: '#dc3545' };
-            indicator.style.background = cores[tipo] || '#28a745';
-        }
-    }
-    
-    function processarDadosPopup(data) {
-        if (!data || data.length === 0) {
-            setStatusPopup('⚠️ Nenhum dado', 'error');
-            return;
+            this.addLog(`📥 Relatório baixado com ${this.dados.relatorio.length} registros`, 'success');
         }
         
-        dadosParaCadastrar = data;
-        relatorio = [];
-        contadores = { sucessos: 0, erros: 0, pulados: 0 };
-        
-        document.getElementById('popup-total-rows').textContent = dadosParaCadastrar.length;
-        document.getElementById('popup-total-cols').textContent = Object.keys(dadosParaCadastrar[0] || {}).length;
-        document.getElementById('popup-stats').style.display = 'flex';
-        document.getElementById('popup-info-cadastros').textContent = `${dadosParaCadastrar.length} carregados`;
-        document.getElementById('popup-btn-iniciar').disabled = false;
-        document.getElementById('popup-btn-relatorio').disabled = true;
-        document.getElementById('popup-status-text').textContent = `✅ ${dadosParaCadastrar.length} registros carregados`;
-        document.getElementById('popup-status-text').style.color = '#28a745';
-        
-        showPreviewPopup(dadosParaCadastrar);
-        
-        chrome.storage.local.set({ dadosUltimos: dadosParaCadastrar });
-        addLog(`📊 ${dadosParaCadastrar.length} registros carregados!`, 'success');
-    }
-    
-    function showPreviewPopup(data) {
-        if (!data || data.length === 0) {
-            document.getElementById('popup-preview').style.display = 'none';
-            return;
-        }
-        
-        document.getElementById('popup-preview').style.display = 'block';
-        const headers = Object.keys(data[0]);
-        
-        let html = '<table style="width:100%;font-size:10px;border-collapse:collapse;">';
-        html += '<thead><tr>';
-        headers.forEach(h => {
-            html += `<th style="background:#f8f9fa;padding:2px 4px;text-align:left;border-bottom:1px solid #dee2e6;">${h}</th>`;
-        });
-        html += '</tr></thead><tbody>';
-        
-        const maxRows = Math.min(5, data.length);
-        for (let i = 0; i < maxRows; i++) {
-            html += '<tr>';
-            headers.forEach(h => {
-                const value = data[i][h] || '';
-                html += `<td style="padding:2px 4px;border-bottom:1px solid #e9ecef;">${value}</td>`;
+        // ===== INTERFACE =====
+        criarBotaoInput() {
+            const usernameSpan = document.getElementById('ott-username');
+            if (!usernameSpan) {
+                setTimeout(() => this.criarBotaoInput(), 1000);
+                return;
+            }
+            
+            if (document.getElementById('btn-input-servico')) return;
+            
+            const container = document.createElement('span');
+            container.className = 'input-servico-container';
+            container.style.cssText = `
+                display: inline-flex;
+                align-items: center;
+                margin-left: 12px;
+                gap: 8px;
+            `;
+            
+            const botao = document.createElement('button');
+            botao.id = 'btn-input-servico';
+            botao.className = 'btn-auto-import';
+            botao.textContent = '📥 Input Serviço/Materiais';
+            botao.title = 'Clique para abrir o painel de automação';
+            botao.style.cssText = `
+                background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+                color: white !important;
+                border: none !important;
+                padding: 6px 16px !important;
+                border-radius: 4px !important;
+                font-size: 13px !important;
+                font-weight: 500 !important;
+                cursor: pointer !important;
+                transition: all 0.3s ease !important;
+                display: inline-flex !important;
+                align-items: center !important;
+                gap: 6px !important;
+                box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3) !important;
+                height: 32px !important;
+                line-height: 1 !important;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+            `;
+            
+            botao.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-1px)';
+                this.style.boxShadow = '0 4px 12px rgba(40, 167, 69, 0.4)';
             });
-            html += '</tr>';
+            
+            botao.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(0)';
+                this.style.boxShadow = '0 2px 4px rgba(40, 167, 69, 0.3)';
+            });
+            
+            botao.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.togglePopup();
+            });
+            
+            container.appendChild(botao);
+            usernameSpan.parentNode.insertBefore(container, usernameSpan.nextSibling);
+            console.log('✅ Botão "Input Serviço/Materiais" adicionado!');
         }
-        html += '</tbody></table>';
-        document.getElementById('popup-preview-content').innerHTML = html;
+        
+        togglePopup() {
+            const popup = document.getElementById('auto-popup');
+            if (!popup) {
+                this.criarPopup();
+                setTimeout(() => {
+                    const newPopup = document.getElementById('auto-popup');
+                    if (newPopup) newPopup.style.display = 'flex';
+                }, 100);
+            } else {
+                popup.style.display = popup.style.display === 'none' ? 'flex' : 'none';
+            }
+        }
+        
+        fecharPopup() {
+            const popup = document.getElementById('auto-popup');
+            if (popup) popup.style.display = 'none';
+        }
+        
+        criarPopup() {
+            const popupExistente = document.getElementById('auto-popup');
+            if (popupExistente) popupExistente.remove();
+            
+            const popup = document.createElement('div');
+            popup.id = 'auto-popup';
+            popup.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                z-index: 10000;
+                background: white;
+                padding: 20px;
+                border-radius: 12px;
+                box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+                min-width: 480px;
+                max-width: 600px;
+                max-height: 85vh;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                border: 1px solid #e0e0e0;
+                display: none;
+                flex-direction: column;
+                animation: popupFadeIn 0.3s ease;
+            `;
+            
+            popup.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2px solid #e9ecef;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="font-size: 22px;">⚡</span>
+                        <h3 style="margin: 0; color: #212529; font-size: 16px;">Automação Serviços</h3>
+                    </div>
+                    <button id="btn-fechar-popup" style="
+                        background: none;
+                        border: none;
+                        font-size: 22px;
+                        cursor: pointer;
+                        color: #6c757d;
+                        padding: 0 6px;
+                        transition: all 0.3s ease;
+                        line-height: 1;
+                    " title="Fechar">✕</button>
+                </div>
+                
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px; padding: 8px 12px; background: #f8f9fa; border-radius: 6px; border: 1px solid #e9ecef;">
+                    <span class="status-indicator" id="popup-status-indicator" style="
+                        display: inline-block;
+                        width: 8px;
+                        height: 8px;
+                        border-radius: 50%;
+                        background: #28a745;
+                    "></span>
+                    <span id="popup-status-text" style="color: #495057; font-weight: 500;">Pronto</span>
+                    <span style="margin-left: auto; color: #6c757d; font-size: 11px;" id="popup-tempo-estimado"></span>
+                </div>
+                
+                <div id="popup-upload-area" style="
+                    border: 2px dashed #dee2e6;
+                    border-radius: 6px;
+                    padding: 15px;
+                    text-align: center;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                    background: #f8f9fa;
+                    margin-bottom: 10px;
+                ">
+                    <div style="font-size: 28px; margin-bottom: 4px;">📊</div>
+                    <div style="font-size: 13px; color: #495057;">
+                        <strong>Clique para selecionar</strong> ou arraste seu CSV
+                    </div>
+                    <div style="font-size: 11px; color: #6c757d;">Suporta: .csv, .txt</div>
+                    <input type="file" id="popup-file-input" accept=".csv,.txt" style="display:none">
+                </div>
+                
+                <div id="popup-file-info" style="
+                    background: #f8fff9;
+                    padding: 6px 12px;
+                    border-radius: 4px;
+                    border-left: 3px solid #28a745;
+                    display: none;
+                    margin-bottom: 8px;
+                    font-size: 12px;
+                ">
+                    <span id="popup-file-name" style="font-weight: 500;">arquivo.csv</span>
+                    <span id="popup-file-size" style="color: #6c757d; margin-left: 8px;">0 KB</span>
+                    <span id="popup-file-rows" style="color: #28a745; margin-left: 8px;">0 linhas</span>
+                </div>
+                
+                <div id="popup-preview" style="
+                    max-height: 100px;
+                    overflow: auto;
+                    background: white;
+                    border-radius: 4px;
+                    border: 1px solid #e9ecef;
+                    padding: 6px;
+                    display: none;
+                    margin-bottom: 8px;
+                    font-size: 11px;
+                ">
+                    <div id="popup-preview-content"></div>
+                </div>
+                
+                <div id="popup-stats" style="
+                    display: none;
+                    gap: 8px;
+                    padding: 6px 10px;
+                    background: white;
+                    border-radius: 4px;
+                    border: 1px solid #e9ecef;
+                    margin-bottom: 8px;
+                ">
+                    <div style="display: flex; gap: 8px; font-size: 12px;">
+                        <div style="flex:1;text-align:center;">
+                            <span style="font-weight:600;color:#28a745;" id="popup-total-rows">0</span>
+                            <span style="color:#6c757d;"> registros</span>
+                        </div>
+                        <div style="flex:1;text-align:center;">
+                            <span style="font-weight:600;color:#28a745;" id="popup-total-cols">0</span>
+                            <span style="color:#6c757d;"> campos</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 8px;">
+                    <div style="height:20px;background:#e9ecef;border-radius:4px;overflow:hidden;">
+                        <div id="auto-progresso" style="width:0%;height:100%;background:#28a745;transition:width 0.3s;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:bold;">0%</div>
+                    </div>
+                </div>
+                
+                <div id="auto-log" style="
+                    flex: 1;
+                    overflow-y: auto;
+                    font-size: 11px;
+                    background: #f8f9fa;
+                    border-radius: 4px;
+                    padding: 6px;
+                    margin-bottom: 8px;
+                    min-height: 80px;
+                    max-height: 150px;
+                    font-family: monospace;
+                    border: 1px solid #e9ecef;
+                ">
+                    <div style="color:#6c757d;">Aguardando início...</div>
+                </div>
+                
+                <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px;">
+                    <button id="popup-btn-iniciar" style="flex:1;padding:6px 10px;background:#28a745;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;transition:all 0.3s;" disabled>▶️ Iniciar</button>
+                    <button id="popup-btn-parar" style="flex:1;padding:6px 10px;background:#dc3545;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;transition:all 0.3s;" disabled>⏹️ Parar</button>
+                    <button id="popup-btn-limpar" style="flex:0 0 auto;padding:6px 10px;background:#6c757d;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;" title="Limpar dados">🗑️</button>
+                </div>
+                
+                <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+                    <button id="popup-btn-relatorio" style="flex:1;padding:6px 10px;background:#17a2b8;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;transition:all 0.3s;" disabled>📊 Relatório</button>
+                    <button id="popup-btn-exportar-log" style="flex:1;padding:6px 10px;background:#6c757d;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;transition:all 0.3s;">📥 Exportar Log</button>
+                </div>
+                
+                <div style="display:flex;gap:8px;font-size:11px;color:#6c757d;align-items:center;margin-bottom:4px;">
+                    <span id="popup-info-cadastros">0 carregados</span>
+                    <label style="margin-left:auto;display:flex;align-items:center;gap:4px;cursor:pointer;">
+                        <input type="checkbox" id="popup-modo-teste" ${CONFIG.modoTeste ? 'checked' : ''}>
+                        Modo Teste
+                    </label>
+                </div>
+            `;
+            
+            document.body.appendChild(popup);
+            
+            if (!document.getElementById('popup-styles')) {
+                const style = document.createElement('style');
+                style.id = 'popup-styles';
+                style.textContent = `
+                    @keyframes popupFadeIn {
+                        from { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
+                        to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+                    }
+                    .log-entry { padding: 2px 4px; border-bottom: 1px solid #f1f3f5; font-size: 10px; }
+                    .log-success { color: #28a745; }
+                    .log-error { color: #dc3545; }
+                    .log-warning { color: #ffc107; }
+                    .log-info { color: #17a2b8; }
+                    #popup-upload-area:hover { border-color: #28a745; background: #f0fff4; }
+                    #popup-upload-area.dragover { border-color: #28a745; background: #f0fff4; }
+                    #popup-preview::-webkit-scrollbar, #auto-log::-webkit-scrollbar { width: 4px; }
+                    #popup-preview::-webkit-scrollbar-track, #auto-log::-webkit-scrollbar-track { background: #f1f1f1; border-radius:2px; }
+                    #popup-preview::-webkit-scrollbar-thumb, #auto-log::-webkit-scrollbar-thumb { background: #888; border-radius:2px; }
+                `;
+                document.head.appendChild(style);
+            }
+            
+            this.configurarEventosPopup();
+            return popup;
+        }
+        
+        configurarEventosPopup() {
+            const self = this;
+            
+            document.getElementById('btn-fechar-popup').addEventListener('click', () => self.fecharPopup());
+            
+            const uploadArea = document.getElementById('popup-upload-area');
+            const fileInput = document.getElementById('popup-file-input');
+            
+            self.fileInput = fileInput;
+            
+            uploadArea.addEventListener('click', () => fileInput.click());
+            
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+            
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('dragover');
+            });
+            
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    fileInput.files = files;
+                    const event = new Event('change', { bubbles: true });
+                    fileInput.dispatchEvent(event);
+                }
+            });
+            
+            fileInput.addEventListener('change', function(e) {
+                const file = this.files[0];
+                if (!file) {
+                    console.log('⚠️ Nenhum arquivo selecionado');
+                    return;
+                }
+                
+                console.log(`📄 Arquivo selecionado: ${file.name}`);
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const texto = e.target.result;
+                        console.log(`📄 Tamanho do arquivo: ${texto.length} caracteres`);
+                        
+                        const dados = self.processarCSV(texto);
+                        
+                        if (dados.length === 0) {
+                            self.setStatusPopup('⚠️ Nenhum dado encontrado no CSV', 'error');
+                            return;
+                        }
+                        
+                        document.getElementById('popup-file-name').textContent = file.name;
+                        document.getElementById('popup-file-size').textContent = (file.size / 1024).toFixed(1) + ' KB';
+                        document.getElementById('popup-file-rows').textContent = dados.length + ' linhas';
+                        document.getElementById('popup-file-info').style.display = 'block';
+                        
+                        self.mapearColunas();
+                        const dadosMapeados = self.getDadosMapeados();
+                        const dadosReordenados = self.reordenarDados(dadosMapeados);
+                        self.processarDadosPopup(dadosReordenados);
+                        
+                    } catch (error) {
+                        console.error('❌ Erro ao processar CSV:', error);
+                        self.setStatusPopup('❌ Erro: ' + error.message, 'error');
+                        self.addLog(`❌ Erro ao processar CSV: ${error.message}`, 'error');
+                    }
+                };
+                
+                reader.onerror = function() {
+                    self.setStatusPopup('❌ Erro ao ler o arquivo', 'error');
+                    self.addLog('❌ Erro ao ler o arquivo', 'error');
+                };
+                
+                reader.readAsText(file);
+            });
+            
+            document.getElementById('popup-btn-iniciar').addEventListener('click', () => {
+                if (self.dados.totalRegistros > 0) {
+                    self.executarTodosCadastros();
+                    document.getElementById('popup-btn-iniciar').disabled = true;
+                    document.getElementById('popup-btn-parar').disabled = false;
+                    document.getElementById('popup-btn-relatorio').disabled = true;
+                } else {
+                    self.addLog('⚠️ Importe um arquivo primeiro!', 'error');
+                }
+            });
+            
+            document.getElementById('popup-btn-parar').addEventListener('click', () => {
+                self.podeParar = true;
+                document.getElementById('popup-btn-parar').disabled = true;
+                document.getElementById('popup-btn-iniciar').disabled = false;
+                self.addLog('⏹️ Parando...', 'warning');
+            });
+            
+            document.getElementById('popup-btn-limpar').addEventListener('click', () => {
+                self.dados.registros = [];
+                self.dados.totalRegistros = 0;
+                self.dados.relatorio = [];
+                self.dados.contadores = { sucessos: 0, erros: 0, pulados: 0 };
+                self.atualizarProgresso(0, 1);
+                document.getElementById('popup-info-cadastros').textContent = '0 carregados';
+                document.getElementById('popup-status-text').textContent = 'Pronto';
+                document.getElementById('popup-status-text').style.color = '#495057';
+                document.getElementById('auto-log').innerHTML = '<div style="color:#6c757d;">Dados limpos</div>';
+                document.getElementById('popup-file-info').style.display = 'none';
+                document.getElementById('popup-preview').style.display = 'none';
+                document.getElementById('popup-stats').style.display = 'none';
+                document.getElementById('popup-btn-iniciar').disabled = true;
+                document.getElementById('popup-btn-relatorio').disabled = true;
+                self.addLog('🗑️ Dados limpos!', 'info');
+                chrome.storage.local.remove('dadosUltimos');
+            });
+            
+            document.getElementById('popup-btn-relatorio').addEventListener('click', () => {
+                self.baixarRelatorio();
+            });
+            
+            document.getElementById('popup-btn-exportar-log').addEventListener('click', () => {
+                const logText = self.log.map(entry => 
+                    `[${entry.timestamp}] ${entry.mensagem}`
+                ).join('\n');
+                
+                let textoCompleto = logText;
+                if (self.dados.relatorio.length > 0) {
+                    textoCompleto += '\n\n========================================\n';
+                    textoCompleto += 'RESUMO DO RELATÓRIO:\n';
+                    textoCompleto += '========================================\n';
+                    textoCompleto += `✅ Sucessos: ${self.dados.contadores.sucessos}\n`;
+                    textoCompleto += `❌ Erros: ${self.dados.contadores.erros}\n`;
+                    textoCompleto += `⏭️ Pulados: ${self.dados.contadores.pulados}\n`;
+                    textoCompleto += `📊 Total: ${self.dados.relatorio.length}\n`;
+                }
+                
+                const blob = new Blob([textoCompleto], { type: 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `log_completo_${new Date().toISOString().slice(0,10)}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                self.addLog('📥 Log exportado!', 'success');
+            });
+            
+            document.getElementById('popup-modo-teste').addEventListener('change', function() {
+                CONFIG.modoTeste = this.checked;
+                self.addLog(`🧪 Modo teste ${this.checked ? 'ativado' : 'desativado'}`, 'info');
+                chrome.storage.local.set({ modoTeste: this.checked });
+            });
+        }
+        
+        setStatusPopup(texto, tipo = 'ready') {
+            const indicator = document.getElementById('popup-status-indicator');
+            const text = document.getElementById('popup-status-text');
+            if (text) text.textContent = texto;
+            if (indicator) {
+                const cores = { ready: '#28a745', running: '#ffc107', error: '#dc3545' };
+                indicator.style.background = cores[tipo] || '#28a745';
+            }
+        }
+        
+        processarDadosPopup(data) {
+            if (!data || data.length === 0) {
+                this.setStatusPopup('⚠️ Nenhum dado', 'error');
+                return;
+            }
+            
+            this.dados.carregarDados(data);
+            
+            document.getElementById('popup-total-rows').textContent = this.dados.totalRegistros;
+            document.getElementById('popup-total-cols').textContent = Object.keys(this.dados.registros[0] || {}).length;
+            document.getElementById('popup-stats').style.display = 'flex';
+            document.getElementById('popup-info-cadastros').textContent = `${this.dados.totalRegistros} carregados`;
+            document.getElementById('popup-btn-iniciar').disabled = false;
+            document.getElementById('popup-btn-relatorio').disabled = true;
+            document.getElementById('popup-status-text').textContent = `✅ ${this.dados.totalRegistros} registros carregados`;
+            document.getElementById('popup-status-text').style.color = '#28a745';
+            
+            this.showPreviewPopup(this.dados.registros);
+            
+            chrome.storage.local.set({ dadosUltimos: this.dados.registros });
+            this.addLog(`📊 ${this.dados.totalRegistros} registros carregados!`, 'success');
+        }
+        
+        showPreviewPopup(data) {
+            if (!data || data.length === 0) {
+                document.getElementById('popup-preview').style.display = 'none';
+                return;
+            }
+            
+            document.getElementById('popup-preview').style.display = 'block';
+            const headers = Object.keys(data[0]);
+            
+            let html = '<table style="width:100%;font-size:10px;border-collapse:collapse;">';
+            html += '<thead><tr>';
+            headers.forEach(h => {
+                html += `<th style="background:#f8f9fa;padding:2px 4px;text-align:left;border-bottom:1px solid #dee2e6;">${h}</th>`;
+            });
+            html += '</tr></thead><tbody>';
+            
+            const maxRows = Math.min(5, data.length);
+            for (let i = 0; i < maxRows; i++) {
+                html += '<tr>';
+                headers.forEach(h => {
+                    const value = data[i][h] || '';
+                    html += `<td style="padding:2px 4px;border-bottom:1px solid #e9ecef;">${value}</td>`;
+                });
+                html += '</tr>';
+            }
+            html += '</tbody></table>';
+            document.getElementById('popup-preview-content').innerHTML = html;
+        }
     }
     
-    // ===== INICIALIZA =====
+    // ============================================
+    // INICIALIZAÇÃO
+    // ============================================
+    
+    const automacao = new Automacao();
+    
     function inicializar() {
         chrome.storage.local.get(['xpathsPersonalizados', 'modoTeste', 'dadosUltimos'], (result) => {
             if (result.xpathsPersonalizados) {
@@ -1794,64 +1987,57 @@
                 CONFIG.modoTeste = result.modoTeste;
             }
             if (result.dadosUltimos && result.dadosUltimos.length > 0) {
-                dadosParaCadastrar = result.dadosUltimos;
-                console.log(`📊 ${dadosParaCadastrar.length} registros carregados do storage`);
+                automacao.dados.carregarDados(result.dadosUltimos);
+                console.log(`📊 ${automacao.dados.totalRegistros} registros carregados do storage`);
             }
         });
         
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', criarBotaoInput);
+            document.addEventListener('DOMContentLoaded', () => automacao.criarBotaoInput());
         } else {
-            criarBotaoInput();
+            automacao.criarBotaoInput();
         }
         
         const observer = new MutationObserver(() => {
             if (!document.getElementById('btn-input-servico')) {
-                criarBotaoInput();
+                automacao.criarBotaoInput();
             }
         });
         observer.observe(document.body, { childList: true, subtree: true });
         
-        console.log('⚡ Automação com validação e relatório inicializada!');
+        console.log('⚡ Automação com Orientação a Objetos inicializada!');
     }
     
     // ===== ESCUTA MENSAGENS =====
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (request.action === 'carregarDados') {
-            if (dadosParaCadastrar.length === 0) {
-                const mapeamento = detectarColunas(request.dados);
-                const dadosMapeados = request.dados.map(row => {
-                    const novoRow = {};
-                    for (const [campo, coluna] of Object.entries(mapeamento || {})) {
-                        novoRow[campo] = row[coluna] || '';
-                    }
-                    return novoRow;
-                });
-                processarDadosPopup(dadosMapeados);
+            if (automacao.dados.totalRegistros === 0) {
+                const dadosReordenados = automacao.reordenarDados(request.dados);
+                automacao.processarDadosPopup(dadosReordenados);
             }
             sendResponse({status: 'success'});
         }
         if (request.action === 'iniciarAutomacao') {
-            if (dadosParaCadastrar.length > 0) {
-                executarTodosCadastros();
+            if (automacao.dados.totalRegistros > 0) {
+                automacao.executarTodosCadastros();
                 sendResponse({status: 'success'});
             } else {
                 sendResponse({status: 'error', message: 'Nenhum dado carregado'});
             }
         }
         if (request.action === 'pararAutomacao') {
-            podeParar = true;
+            automacao.podeParar = true;
             sendResponse({status: 'success'});
         }
         if (request.action === 'getStatus') {
             sendResponse({
-                status: estaExecutando ? 'executando' : 'parado',
-                total: dadosParaCadastrar.length,
-                atual: cadastroAtual
+                status: automacao.estaExecutando ? 'executando' : 'parado',
+                total: automacao.dados.totalRegistros,
+                atual: automacao.dados.indiceAtual
             });
         }
         if (request.action === 'togglePopup') {
-            togglePopup();
+            automacao.togglePopup();
             sendResponse({status: 'success'});
         }
         return true;
