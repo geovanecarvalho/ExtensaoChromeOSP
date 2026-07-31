@@ -6,7 +6,7 @@
     'use strict';
     
     console.log('🤖 Automação de Serviços/Materiais carregada!');
-    console.log('📋 Versão com mapeamento CORRIGIDO');
+    console.log('📋 Versão SIMPLIFICADA - Busca por nome das colunas');
     
     // ===== CONFIGURAÇÕES =====
     const CONFIG = {
@@ -57,7 +57,6 @@
             this.log = [];
             this.executando = false;
             this.podeParar = false;
-            this.mapeamentoColunas = {};
         }
         
         carregarDados(dados) {
@@ -68,19 +67,6 @@
             this.contadores = { sucessos: 0, erros: 0, pulados: 0 };
             console.log(`📊 ${this.totalRegistros} registros carregados`);
             return this;
-        }
-        
-        proximoRegistro() {
-            if (this.indiceAtual < this.totalRegistros) {
-                this.registroAtual = this.registros[this.indiceAtual];
-                this.indiceAtual++;
-                return this.registroAtual;
-            }
-            return null;
-        }
-        
-        getRegistroAtual() {
-            return this.registroAtual;
         }
         
         adicionarResultado(id, status, mensagem, dados, erro = null) {
@@ -138,7 +124,7 @@
     }
     
     // ============================================
-    // CLASSE PROCESSADOR_CSV - CORRIGIDA
+    // CLASSE PROCESSADOR_CSV - SIMPLIFICADA
     // ============================================
     class ProcessadorCSV {
         constructor() {
@@ -170,7 +156,7 @@
             }
             
             this.headers = linhas[0].split(delimitador).map(h => h.trim().replace(/^"|"$/g, ''));
-            console.log(`📋 Cabeçalhos: ${this.headers.join(', ')}`);
+            console.log(`📋 Cabeçalhos encontrados: ${this.headers.join(', ')}`);
             
             this.dados = [];
             for (let i = 1; i < linhas.length; i++) {
@@ -186,88 +172,131 @@
             return this.dados;
         }
         
-        // ===== MAPEAMENTO CORRIGIDO =====
+        // ===== MAPEAMENTO POR NOME (SIMPLES E EFICAZ) =====
         mapearColunas() {
             const mapeamento = {};
             
-            // MAPEAMENTO EXPLÍCITO POR POSIÇÃO
-            // Posição 0: ID
-            // Posição 1: PRANCHA
-            // Posição 2: CLASSE
-            // Posição 3: MARACODE
-            // Posição 4: QTD SERVICO EXECUTADO
-            // Posição 5: PESQUISA MATERIAL
-            // Posição 6: QTD MATERIAL
-            // Posição 7: LOCAL EXECUCAO OBRA
-            
-            console.log('📋 Mapeando colunas por posição...');
-            
-            // Primeiro: mapeia pela posição exata
-            const posicoes = {
-                'ID': 0,
-                'PRANCHA': 1,
-                'CLASSE': 2,
-                'MARACODE': 3,
-                'QTD SERVICO EXECUTADO': 4,
-                'PESQUISA MATERIAL': 5,
-                'QTD MATERIAL': 6,
-                'LOCAL EXECUCAO OBRA': 7
+            // Define as regras de mapeamento por nome
+            const regras = {
+                'ID': ['id', 'Id', 'ID', 'Codigo'],
+                'PRANCHA': ['prancha', 'Prancha', 'PRANCHA'],
+                'CLASSE': ['classe', 'Classe', 'CLASSE'],
+                'MARACODE': ['maracode', 'MaraCode', 'MARACODE', 'MARACOD'],
+                'QTD SERVICO EXECUTADO': ['qtd servico executado', 'Qtd Servico Executado', 'QTD_SERVICO_EXECUTADO', 'servico executado'],
+                'PESQUISA MATERIAL': ['pesquisa material', 'Pesquisa Material', 'PESQUISA MATERIAL', 'PESQUISA MATERIA', 'material pesquisa'],
+                'QTD MATERIAL': ['qtd material', 'Qtd Material', 'QTD MATERIAL', 'QTD MATERIA', 'quantidade material'],
+                'LOCAL EXECUCAO OBRA': ['local execucao obra', 'Local Execucao Obra', 'LOCAL EXECUCAO OBRA', 'local obra', 'Local Obra']
             };
             
-            for (const [campo, posicao] of Object.entries(posicoes)) {
-                if (this.headers[posicao]) {
-                    mapeamento[campo] = this.headers[posicao];
-                    console.log(`✅ Mapeou "${campo}" -> coluna "${this.headers[posicao]}" (posição ${posicao})`);
+            // Para cada regra, procura a coluna correspondente
+            for (const [campo, variacoes] of Object.entries(regras)) {
+                let encontrado = false;
+                
+                for (const variacao of variacoes) {
+                    // Procura por correspondência exata (case insensitive)
+                    const chave = this.headers.find(h => 
+                        h.trim().toLowerCase() === variacao.toLowerCase()
+                    );
+                    
+                    if (chave) {
+                        mapeamento[campo] = chave;
+                        console.log(`✅ Mapeou "${campo}" -> coluna "${chave}" (exato)`);
+                        encontrado = true;
+                        break;
+                    }
+                }
+                
+                if (!encontrado) {
+                    // Tenta por similaridade (contém a palavra)
+                    for (const variacao of variacoes) {
+                        const chave = this.headers.find(h => 
+                            h.trim().toLowerCase().includes(variacao.toLowerCase()) ||
+                            variacao.toLowerCase().includes(h.trim().toLowerCase())
+                        );
+                        
+                        if (chave) {
+                            mapeamento[campo] = chave;
+                            console.log(`✅ Mapeou "${campo}" -> coluna "${chave}" (similar)`);
+                            encontrado = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (!encontrado) {
+                    console.log(`⚠️ Campo "${campo}" não encontrado!`);
                 }
             }
             
-            // Segundo: verifica se os nomes estão corretos e ajusta se necessário
-            const verificarNome = (campo, header) => {
-                const campoLower = campo.toLowerCase();
-                const headerLower = header.toLowerCase();
-                
-                // Se o header contém o nome do campo ou vice-versa
-                if (headerLower.includes(campoLower) || campoLower.includes(headerLower)) {
-                    return true;
+            // ===== CORREÇÃO ESPECIAL: Se PESQUISA MATERIAL está vazio =====
+            // Verifica se a coluna "PESQUISA MATERIAL" existe mas está vazia
+            if (mapeamento['PESQUISA MATERIAL']) {
+                const colunaPesquisa = mapeamento['PESQUISA MATERIAL'];
+                // Verifica se há dados na coluna
+                let temDados = false;
+                for (const row of this.dados) {
+                    if (row[colunaPesquisa] && row[colunaPesquisa].trim() !== '') {
+                        temDados = true;
+                        break;
+                    }
                 }
-                return false;
-            };
-            
-            // Verifica cada mapeamento
-            for (const [campo, header] of Object.entries(mapeamento)) {
-                if (!verificarNome(campo, header)) {
-                    console.log(`⚠️ Atenção: "${campo}" está mapeado para coluna "${header}" que não parece corresponder`);
-                    
-                    // Tenta encontrar um header melhor
-                    for (const h of this.headers) {
-                        if (verificarNome(campo, h)) {
-                            mapeamento[campo] = h;
-                            console.log(`✅ Corrigiu "${campo}" -> coluna "${h}"`);
+                
+                if (!temDados) {
+                    console.log(`⚠️ Coluna "${colunaPesquisa}" está vazia. Tentando encontrar outra...`);
+                    // Procura por qualquer coluna que contenha valores como "0452-0120-3"
+                    for (const header of this.headers) {
+                        if (header === colunaPesquisa) continue;
+                        let temValor = false;
+                        for (const row of this.dados) {
+                            if (row[header] && row[header].trim() !== '' && row[header].includes('-')) {
+                                temValor = true;
+                                break;
+                            }
+                        }
+                        if (temValor) {
+                            mapeamento['PESQUISA MATERIAL'] = header;
+                            console.log(`✅ Corrigiu "PESQUISA MATERIAL" -> coluna "${header}" (por dados)`);
                             break;
                         }
                     }
                 }
             }
             
-            // ===== CORREÇÃO ESPECÍFICA: Se QTD SERVICO EXECUTADO está vazio =====
-            // Verifica se os dados estão sendo lidos corretamente
-            if (this.dados && this.dados.length > 0) {
-                const primeiroRegistro = this.dados[0];
-                const headerQtdServico = mapeamento['QTD SERVICO EXECUTADO'];
-                const headerPesquisaMaterial = mapeamento['PESQUISA MATERIAL'];
+            // ===== CORREÇÃO ESPECIAL: Se QTD MATERIAL está recebendo código de material =====
+            // Verifica se QTD MATERIAL está com valores que parecem códigos (contém "-")
+            if (mapeamento['QTD MATERIAL']) {
+                const colunaQtd = mapeamento['QTD MATERIAL'];
+                let pareceCodigo = false;
+                for (const row of this.dados) {
+                    if (row[colunaQtd] && row[colunaQtd].includes('-')) {
+                        pareceCodigo = true;
+                        break;
+                    }
+                }
                 
-                if (headerQtdServico && primeiroRegistro[headerQtdServico] === '') {
-                    console.log('⚠️ QTD SERVICO EXECUTADO está vazio, verificando mapeamento...');
-                    
-                    // Tenta encontrar a coluna correta
-                    for (const h of this.headers) {
-                        if (primeiroRegistro[h] && primeiroRegistro[h].match(/[\d,]+/)) {
-                            // Se o valor contém números, provavelmente é QTD SERVICO
-                            if (!mapeamento['QTD SERVICO EXECUTADO'] || mapeamento['QTD SERVICO EXECUTADO'] === '') {
-                                mapeamento['QTD SERVICO EXECUTADO'] = h;
-                                console.log(`✅ Mapeou "QTD SERVICO EXECUTADO" -> coluna "${h}" (por valor numérico)`);
+                if (pareceCodigo) {
+                    console.log(`⚠️ Coluna "${colunaQtd}" parece ter códigos (contém -). Tentando corrigir...`);
+                    // Procura por coluna que tenha números puros
+                    for (const header of this.headers) {
+                        if (header === colunaQtd) continue;
+                        let temNumero = false;
+                        for (const row of this.dados) {
+                            if (row[header] && row[header].match(/^\d+$/)) {
+                                temNumero = true;
                                 break;
                             }
+                        }
+                        if (temNumero) {
+                            // Troca: o que era QTD vira PESQUISA, e o que era PESQUISA vira QTD
+                            const colunaPesquisa = mapeamento['PESQUISA MATERIAL'];
+                            if (colunaPesquisa) {
+                                // Troca os valores entre as colunas
+                                mapeamento['PESQUISA MATERIAL'] = colunaQtd;
+                                mapeamento['QTD MATERIAL'] = header;
+                                console.log(`✅ Corrigiu: PESQUISA MATERIAL -> coluna "${colunaQtd}"`);
+                                console.log(`✅ Corrigiu: QTD MATERIAL -> coluna "${header}"`);
+                            }
+                            break;
                         }
                     }
                 }
@@ -987,7 +1016,7 @@
                 return { sucesso: false, erro: erro, pulado: true };
             }
             
-            // Extrai todos os dados da planilha - CORRIGIDO
+            // Extrai todos os dados da planilha
             const prancha = dados['PRANCHA'] || dados['Prancha'] || '';
             const maraCode = dados['MARACODE'] || dados['MaraCode'] || '';
             const qtdServico = dados['QTD SERVICO EXECUTADO'] || dados['Qtd Servico Executado'] || '';
@@ -995,31 +1024,20 @@
             const qtdMaterial = dados['QTD MATERIAL'] || dados['Qtd Material'] || '';
             const localObra = dados['LOCAL EXECUCAO OBRA'] || dados['Local Execucao Obra'] || '';
             
-            // ===== CORREÇÃO: Verifica se os dados estão trocados =====
-            // Se QTD SERVICO está vazio e PESQUISA MATERIAL tem números, pode estar trocado
-            let qtdServicoCorrigido = qtdServico;
-            let pesquisaMaterialCorrigido = pesquisaMaterial;
-            
-            // Se qtdServico está vazio e pesquisaMaterial tem números (com vírgula)
-            if (!qtdServicoCorrigido && pesquisaMaterialCorrigido && pesquisaMaterialCorrigido.match(/[\d,]+/)) {
-                // Pode ser que os campos estejam trocados
-                this.addLog(`⚠️ Possível troca de campos detectada! QTD SERVICO está vazio e PESQUISA MATERIAL tem números.`, 'warning');
-                // Mantém como está, mas vamos verificar no sistema
-            }
-            
             const dadosCompletos = {
                 id: idValue,
                 classe: classe,
                 prancha: prancha,
                 maraCode: maraCode,
-                qtdServico: qtdServicoCorrigido,
-                pesquisaMaterial: pesquisaMaterialCorrigido,
+                qtdServico: qtdServico,
+                pesquisaMaterial: pesquisaMaterial,
                 qtdMaterial: qtdMaterial,
                 localObra: localObra,
                 isMaterial: isMaterial
             };
             
-            this.addLog(`📋 Dados completos: ${JSON.stringify(dadosCompletos)}`, 'info');
+            this.addLog(`📋 Dados: Prancha="${prancha}", MaraCode="${maraCode}"`, 'info');
+            this.addLog(`📋 PesqMaterial="${pesquisaMaterial}", QtdMaterial="${qtdMaterial}", Local="${localObra}"`, 'info');
             
             try {
                 // ===== PASSO 1: COLLAPSE =====
@@ -1218,12 +1236,15 @@
                 // 6. QTD MATERIAL - SOMENTE PARA MATERIAIS
                 const inputQtdMaterial = await this.waitForElement(CONFIG.xpaths.inputQtdMaterial, 5000);
                 if (inputQtdMaterial && dadosCompletos.isMaterial) {
-                    if (dadosCompletos.qtdMaterial && String(dadosCompletos.qtdMaterial) !== String(idValue) && String(dadosCompletos.qtdMaterial) !== '') {
+                    // Verifica se o valor é um número (quantidade) e não um código
+                    if (dadosCompletos.qtdMaterial && 
+                        !dadosCompletos.qtdMaterial.includes('-') && 
+                        String(dadosCompletos.qtdMaterial) !== String(idValue)) {
                         const valorConvertido = this.converterNumero(dadosCompletos.qtdMaterial);
                         this.addLog(`📦 Qtd Material: "${valorConvertido}" (original: "${dadosCompletos.qtdMaterial}")`, 'info');
                         await this.preencherCampo(inputQtdMaterial, valorConvertido, 'Qtd Material');
                     } else {
-                        this.addLog(`⏭️ Qtd Material ignorado (vazio ou igual ao ID)`, 'info');
+                        this.addLog(`⏭️ Qtd Material ignorado (vazio, código ou igual ao ID)`, 'info');
                     }
                 } else if (!dadosCompletos.isMaterial) {
                     this.addLog(`⏭️ Serviço - pulando Qtd Material`, 'info');
