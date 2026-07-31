@@ -6,9 +6,9 @@
     'use strict';
     
     console.log('🤖 Automação de Serviços/Materiais carregada!');
-    console.log('📋 Versão SIMPLIFICADA - Busca por nome das colunas');
+    console.log('📋 Versão OTIMIZADA - Mais rápida');
     
-    // ===== CONFIGURAÇÕES =====
+    // ===== CONFIGURAÇÕES OTIMIZADAS =====
     const CONFIG = {
         xpaths: {
             menuCollapse: '//span[@id="ott-sidebar-collapse"]',
@@ -30,16 +30,17 @@
             inputLocalObra: '//*[@id="localObra"]'
         },
         
-        delayEntreCadastros: 3000,
-        delayPreenchimento: 300,
-        delayAposBusca: 2000,
-        delayAposClick: 500,
-        delayAposNavegacao: 2000,
-        delayAposSalvar: 3000,
-        delayAposEnter: 800,
-        delayAposFechar: 500,
-        delayExpansaoFormulario: 3000,
-        delayAposPreencher: 500,
+        // ===== DELAYS OTIMIZADOS (MAIS RÁPIDOS) =====
+        delayEntreCadastros: 2000,        // Reduzido de 3000 para 2000ms
+        delayPreenchimento: 150,          // Reduzido de 300 para 150ms
+        delayAposBusca: 1500,             // Reduzido de 2000 para 1500ms
+        delayAposClick: 300,              // Reduzido de 500 para 300ms
+        delayAposNavegacao: 1500,         // Reduzido de 2000 para 1500ms
+        delayAposSalvar: 2000,            // Reduzido de 3000 para 2000ms
+        delayAposEnter: 400,              // Reduzido de 800 para 400ms
+        delayAposFechar: 300,             // Reduzido de 500 para 300ms
+        delayExpansaoFormulario: 2000,    // Reduzido de 3000 para 2000ms
+        delayAposPreencher: 200,          // Reduzido de 500 para 200ms
         modoTeste: false
     };
     
@@ -124,7 +125,7 @@
     }
     
     // ============================================
-    // CLASSE PROCESSADOR_CSV - SIMPLIFICADA
+    // CLASSE PROCESSADOR_CSV - COM CORREÇÃO UTF-8
     // ============================================
     class ProcessadorCSV {
         constructor() {
@@ -136,8 +137,18 @@
         processar(texto) {
             console.log('📄 Processando CSV...');
             
+            // ===== CORREÇÃO UTF-8 =====
+            // Remove BOM se existir
             if (texto.startsWith('\uFEFF')) {
                 texto = texto.substring(1);
+            }
+            
+            // Tenta decodificar corretamente caracteres especiais
+            try {
+                // Converte para o formato correto de string
+                texto = decodeURIComponent(escape(texto));
+            } catch (e) {
+                console.log('⚠️ Não foi possível decodificar, mantendo texto original');
             }
             
             let delimitador = ',';
@@ -172,11 +183,10 @@
             return this.dados;
         }
         
-        // ===== MAPEAMENTO POR NOME (SIMPLES E EFICAZ) =====
+        // ===== MAPEAMENTO POR NOME =====
         mapearColunas() {
             const mapeamento = {};
             
-            // Define as regras de mapeamento por nome
             const regras = {
                 'ID': ['id', 'Id', 'ID', 'Codigo'],
                 'PRANCHA': ['prancha', 'Prancha', 'PRANCHA'],
@@ -188,26 +198,23 @@
                 'LOCAL EXECUCAO OBRA': ['local execucao obra', 'Local Execucao Obra', 'LOCAL EXECUCAO OBRA', 'local obra', 'Local Obra']
             };
             
-            // Para cada regra, procura a coluna correspondente
             for (const [campo, variacoes] of Object.entries(regras)) {
                 let encontrado = false;
                 
                 for (const variacao of variacoes) {
-                    // Procura por correspondência exata (case insensitive)
                     const chave = this.headers.find(h => 
                         h.trim().toLowerCase() === variacao.toLowerCase()
                     );
                     
                     if (chave) {
                         mapeamento[campo] = chave;
-                        console.log(`✅ Mapeou "${campo}" -> coluna "${chave}" (exato)`);
+                        console.log(`✅ Mapeou "${campo}" -> coluna "${chave}"`);
                         encontrado = true;
                         break;
                     }
                 }
                 
                 if (!encontrado) {
-                    // Tenta por similaridade (contém a palavra)
                     for (const variacao of variacoes) {
                         const chave = this.headers.find(h => 
                             h.trim().toLowerCase().includes(variacao.toLowerCase()) ||
@@ -228,11 +235,9 @@
                 }
             }
             
-            // ===== CORREÇÃO ESPECIAL: Se PESQUISA MATERIAL está vazio =====
-            // Verifica se a coluna "PESQUISA MATERIAL" existe mas está vazia
+            // ===== CORREÇÃO: Verifica se PESQUISA MATERIAL está vazio =====
             if (mapeamento['PESQUISA MATERIAL']) {
                 const colunaPesquisa = mapeamento['PESQUISA MATERIAL'];
-                // Verifica se há dados na coluna
                 let temDados = false;
                 for (const row of this.dados) {
                     if (row[colunaPesquisa] && row[colunaPesquisa].trim() !== '') {
@@ -242,8 +247,6 @@
                 }
                 
                 if (!temDados) {
-                    console.log(`⚠️ Coluna "${colunaPesquisa}" está vazia. Tentando encontrar outra...`);
-                    // Procura por qualquer coluna que contenha valores como "0452-0120-3"
                     for (const header of this.headers) {
                         if (header === colunaPesquisa) continue;
                         let temValor = false;
@@ -255,15 +258,14 @@
                         }
                         if (temValor) {
                             mapeamento['PESQUISA MATERIAL'] = header;
-                            console.log(`✅ Corrigiu "PESQUISA MATERIAL" -> coluna "${header}" (por dados)`);
+                            console.log(`✅ Corrigiu "PESQUISA MATERIAL" -> coluna "${header}"`);
                             break;
                         }
                     }
                 }
             }
             
-            // ===== CORREÇÃO ESPECIAL: Se QTD MATERIAL está recebendo código de material =====
-            // Verifica se QTD MATERIAL está com valores que parecem códigos (contém "-")
+            // ===== CORREÇÃO: Verifica se QTD MATERIAL está correto =====
             if (mapeamento['QTD MATERIAL']) {
                 const colunaQtd = mapeamento['QTD MATERIAL'];
                 let pareceCodigo = false;
@@ -275,8 +277,6 @@
                 }
                 
                 if (pareceCodigo) {
-                    console.log(`⚠️ Coluna "${colunaQtd}" parece ter códigos (contém -). Tentando corrigir...`);
-                    // Procura por coluna que tenha números puros
                     for (const header of this.headers) {
                         if (header === colunaQtd) continue;
                         let temNumero = false;
@@ -287,10 +287,8 @@
                             }
                         }
                         if (temNumero) {
-                            // Troca: o que era QTD vira PESQUISA, e o que era PESQUISA vira QTD
                             const colunaPesquisa = mapeamento['PESQUISA MATERIAL'];
                             if (colunaPesquisa) {
-                                // Troca os valores entre as colunas
                                 mapeamento['PESQUISA MATERIAL'] = colunaQtd;
                                 mapeamento['QTD MATERIAL'] = header;
                                 console.log(`✅ Corrigiu: PESQUISA MATERIAL -> coluna "${colunaQtd}"`);
@@ -323,7 +321,7 @@
     }
     
     // ============================================
-    // CLASSE AUTOMACAO
+    // CLASSE AUTOMACAO - OTIMIZADA
     // ============================================
     class Automacao {
         constructor() {
@@ -336,13 +334,13 @@
             this.fileInput = null;
         }
         
-        // ===== FUNÇÕES AUXILIARES =====
+        // ===== FUNÇÕES AUXILIARES OTIMIZADAS =====
         
         wait(ms) {
             return new Promise(resolve => setTimeout(resolve, ms));
         }
         
-        waitForElement(selector, timeout = 10000) {
+        waitForElement(selector, timeout = 8000) {
             return new Promise((resolve) => {
                 const startTime = Date.now();
                 
@@ -376,7 +374,7 @@
                         return;
                     }
                     
-                    setTimeout(findElement, 300);
+                    setTimeout(findElement, 200);
                 }
                 
                 findElement();
@@ -385,7 +383,7 @@
         
         async waitForIdField() {
             let tentativas = 0;
-            const maxTentativas = 20;
+            const maxTentativas = 15;
             
             while (tentativas < maxTentativas) {
                 let inputId = null;
@@ -412,7 +410,7 @@
                 }
                 
                 tentativas++;
-                await this.wait(500);
+                await this.wait(300);
             }
             
             return null;
@@ -425,7 +423,7 @@
             }
             try {
                 element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                await this.wait(500);
+                await this.wait(200);
                 
                 try {
                     element.click();
@@ -476,7 +474,7 @@
             }
             try {
                 elemento.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                await this.wait(300);
+                await this.wait(150);
                 
                 if (elemento.tagName === 'SELECT') {
                     const valorStr = String(valor).trim();
@@ -500,7 +498,7 @@
                     if (encontrado) {
                         const event = new Event('change', { bubbles: true });
                         elemento.dispatchEvent(event);
-                        this.addLog(`✅ Preencheu select: ${descricao} = ${valor}`, 'success');
+                        this.addLog(`✅ Select: ${descricao} = ${valor}`, 'success');
                         return true;
                     }
                     return false;
@@ -512,17 +510,17 @@
                     
                     elemento.value = '';
                     elemento.focus();
-                    await this.wait(200);
+                    await this.wait(100);
                     elemento.value = String(valorFinal);
                     const event = new Event('input', { bubbles: true });
                     elemento.dispatchEvent(event);
                     elemento.blur();
-                    await this.wait(200);
+                    await this.wait(100);
                     ['change', 'blur'].forEach(eventType => {
                         const event = new Event(eventType, { bubbles: true });
                         elemento.dispatchEvent(event);
                     });
-                    this.addLog(`✅ Preencheu campo: ${descricao} = ${valorFinal}`, 'success');
+                    this.addLog(`✅ ${descricao} = ${valorFinal}`, 'success');
                     await this.wait(CONFIG.delayAposPreencher);
                     return true;
                 }
@@ -539,42 +537,31 @@
                 return false;
             }
             if (valor === undefined || valor === null || valor === '') {
-                this.addLog(`⏭️ ${descricao} vazio, pulando...`, 'info');
+                this.addLog(`⏭️ ${descricao} vazio`, 'info');
                 return true;
             }
             
             let valorFinal = this.converterNumero(valor);
-            this.addLog(`🔢 Tentando preencher ${descricao} com valor: "${valorFinal}"`, 'info');
+            this.addLog(`🔢 ${descricao}: ${valorFinal}`, 'info');
             
             try {
                 elemento.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                await this.wait(300);
+                await this.wait(200);
                 
                 elemento.click();
-                await this.wait(200);
+                await this.wait(100);
                 elemento.focus();
-                await this.wait(200);
+                await this.wait(100);
                 elemento.value = '';
                 await this.wait(100);
                 elemento.value = String(valorFinal);
                 elemento.dispatchEvent(new Event('input', { bubbles: true }));
                 elemento.dispatchEvent(new Event('change', { bubbles: true }));
                 elemento.blur();
-                await this.wait(200);
+                await this.wait(100);
                 
                 if (elemento.value === String(valorFinal) || elemento.value.replace(',', '.') === String(valorFinal)) {
-                    this.addLog(`✅ ${descricao} preenchido: ${elemento.value}`, 'success');
-                    await this.wait(CONFIG.delayAposPreencher);
-                    return true;
-                }
-                
-                elemento.value = String(valorFinal);
-                elemento.dispatchEvent(new Event('input', { bubbles: true }));
-                elemento.dispatchEvent(new Event('change', { bubbles: true }));
-                await this.wait(200);
-                
-                if (elemento.value === String(valorFinal) || elemento.value.replace(',', '.') === String(valorFinal)) {
-                    this.addLog(`✅ ${descricao} preenchido (estratégia 2): ${elemento.value}`, 'success');
+                    this.addLog(`✅ ${descricao}: ${elemento.value}`, 'success');
                     await this.wait(CONFIG.delayAposPreencher);
                     return true;
                 }
@@ -585,32 +572,31 @@
                 nativeInputValueSetter.call(elemento, String(valorFinal));
                 elemento.dispatchEvent(new Event('input', { bubbles: true }));
                 elemento.dispatchEvent(new Event('change', { bubbles: true }));
-                await this.wait(200);
+                await this.wait(100);
                 
                 if (elemento.value === String(valorFinal) || elemento.value.replace(',', '.') === String(valorFinal)) {
-                    this.addLog(`✅ ${descricao} preenchido (estratégia 3): ${elemento.value}`, 'success');
+                    this.addLog(`✅ ${descricao}: ${elemento.value}`, 'success');
                     await this.wait(CONFIG.delayAposPreencher);
                     return true;
                 }
                 
-                this.addLog(`⚠️ ${descricao} NÃO preenchido. Valor atual: "${elemento.value}"`, 'warning');
                 return false;
             } catch (e) {
-                this.addLog(`❌ Erro ao preencher ${descricao}: ${e.message}`, 'error');
+                this.addLog(`❌ Erro ${descricao}: ${e.message}`, 'error');
                 return false;
             }
         }
         
         async encontrarLocalObra() {
-            this.addLog('🔍 Procurando campo Local Execução Obra...', 'info');
+            this.addLog('🔍 Local Obra...', 'info');
             
-            await this.wait(1000);
+            await this.wait(500);
             
             let elemento = document.querySelector('#localObra');
             if (elemento) {
                 const isVisible = elemento.offsetParent !== null && elemento.offsetWidth > 0;
                 if (isVisible) {
-                    this.addLog('✅ Local Obra encontrado por ID (visível)', 'success');
+                    this.addLog('✅ Local Obra encontrado', 'success');
                     return elemento;
                 }
             }
@@ -627,7 +613,7 @@
                 if (elemento) {
                     const isVisible = elemento.offsetParent !== null && elemento.offsetWidth > 0;
                     if (isVisible) {
-                        this.addLog('✅ Local Obra encontrado por XPATH (visível)', 'success');
+                        this.addLog('✅ Local Obra encontrado (XPATH)', 'success');
                         return elemento;
                     }
                 }
@@ -637,7 +623,7 @@
             for (const input of inputs) {
                 const isVisible = input.offsetParent !== null && input.offsetWidth > 0;
                 if (isVisible) {
-                    this.addLog('✅ Local Obra encontrado por placeholder (visível)', 'success');
+                    this.addLog('✅ Local Obra encontrado (placeholder)', 'success');
                     return input;
                 }
             }
@@ -646,61 +632,51 @@
             for (const input of inputsByName) {
                 const isVisible = input.offsetParent !== null && input.offsetWidth > 0;
                 if (isVisible) {
-                    this.addLog('✅ Local Obra encontrado por formcontrolname (visível)', 'success');
+                    this.addLog('✅ Local Obra encontrado (formcontrol)', 'success');
                     return input;
                 }
             }
             
-            const allInputs = document.querySelectorAll('input');
-            for (const input of allInputs) {
-                if (input.offsetParent !== null && input.offsetWidth > 0) {
-                    if (input.placeholder && input.placeholder.toLowerCase().includes('local')) {
-                        this.addLog(`✅ Local Obra encontrado por busca: "${input.placeholder}"`, 'success');
-                        return input;
-                    }
-                }
-            }
-            
-            this.addLog('❌ Local Obra NÃO encontrado ou NÃO visível!', 'error');
+            this.addLog('❌ Local Obra NÃO encontrado!', 'error');
             return null;
         }
         
         async preencherLocalObraEspecifico(elemento, valor, descricao = '') {
             if (!elemento) {
-                this.addLog(`❌ Campo ${descricao} é nulo`, 'error');
+                this.addLog(`❌ ${descricao} é nulo`, 'error');
                 return false;
             }
             if (valor === undefined || valor === null || valor === '') {
-                this.addLog(`⏭️ ${descricao} vazio, pulando...`, 'info');
+                this.addLog(`⏭️ ${descricao} vazio`, 'info');
                 return true;
             }
             
-            this.addLog(`📍 Preenchendo ${descricao} com: "${valor}"`, 'info');
+            this.addLog(`📍 ${descricao}: "${valor}"`, 'info');
             
             try {
                 elemento.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                await this.wait(500);
+                await this.wait(300);
                 
                 elemento.click();
-                await this.wait(300);
+                await this.wait(150);
                 elemento.focus();
-                await this.wait(300);
+                await this.wait(150);
                 
                 elemento.value = '';
-                await this.wait(200);
+                await this.wait(100);
                 elemento.value = String(valor);
                 elemento.dispatchEvent(new Event('input', { bubbles: true }));
                 elemento.dispatchEvent(new Event('change', { bubbles: true }));
-                await this.wait(500);
-                
-                elemento.blur();
                 await this.wait(300);
                 
-                this.addLog(`✅ ${descricao} preenchido: "${elemento.value}"`, 'success');
+                elemento.blur();
+                await this.wait(150);
+                
+                this.addLog(`✅ ${descricao}: "${elemento.value}"`, 'success');
                 await this.wait(CONFIG.delayAposPreencher);
                 return true;
             } catch (e) {
-                this.addLog(`❌ Erro ao preencher ${descricao}: ${e.message}`, 'error');
+                this.addLog(`❌ Erro ${descricao}: ${e.message}`, 'error');
                 return false;
             }
         }
@@ -709,13 +685,13 @@
             if (!inputId) return false;
             if (valor === undefined || valor === null || valor === '') return false;
             inputId.focus();
-            await this.wait(200);
+            await this.wait(100);
             inputId.value = '';
             inputId.value = String(valor);
             inputId.dispatchEvent(new Event('input', { bubbles: true }));
             inputId.dispatchEvent(new Event('change', { bubbles: true }));
             inputId.blur();
-            await this.wait(300);
+            await this.wait(150);
             return inputId.value === String(valor);
         }
         
@@ -723,7 +699,7 @@
             if (!elemento) return false;
             try {
                 elemento.focus();
-                await this.wait(300);
+                await this.wait(150);
                 
                 const enterEvent = new KeyboardEvent('keydown', {
                     key: 'Enter',
@@ -745,7 +721,7 @@
                 });
                 elemento.dispatchEvent(keyupEvent);
                 
-                this.addLog(`⌨️ Enter pressionado em: ${descricao}`, 'info');
+                this.addLog(`⌨️ Enter em: ${descricao}`, 'info');
                 await this.wait(CONFIG.delayAposEnter);
                 return true;
             } catch (e) {
@@ -754,24 +730,24 @@
         }
         
         async encontrarMaraCode() {
-            this.addLog('🔍 Procurando campo MaraCode...', 'info');
+            this.addLog('🔍 MaraCode...', 'info');
             
-            let elemento = await this.waitForElement('//input[@placeholder="Mara Code"]', 3000);
+            let elemento = await this.waitForElement('//input[@placeholder="Mara Code"]', 2000);
             if (elemento) {
-                this.addLog('✅ MaraCode encontrado por placeholder', 'success');
+                this.addLog('✅ MaraCode encontrado', 'success');
                 return elemento;
             }
             
             elemento = document.querySelector('input[placeholder="Mara Code"]');
             if (elemento) {
-                this.addLog('✅ MaraCode encontrado por CSS selector', 'success');
+                this.addLog('✅ MaraCode encontrado (CSS)', 'success');
                 return elemento;
             }
             
             const inputs = document.querySelectorAll('input');
             for (const input of inputs) {
                 if (input.placeholder && input.placeholder.toLowerCase().includes('mara')) {
-                    this.addLog(`✅ MaraCode encontrado por busca: "${input.placeholder}"`, 'success');
+                    this.addLog(`✅ MaraCode encontrado: "${input.placeholder}"`, 'success');
                     return input;
                 }
             }
@@ -781,15 +757,15 @@
         }
         
         async encontrarPesquisaMaterial() {
-            this.addLog('🔍 Procurando campo Pesquisa Material...', 'info');
+            this.addLog('🔍 Pesquisa Material...', 'info');
             
-            await this.wait(2000);
+            await this.wait(1000);
             
-            let elemento = await this.waitForElement('//input[@placeholder="Material"]', 3000);
+            let elemento = await this.waitForElement('//input[@placeholder="Material"]', 2000);
             if (elemento) {
                 const isVisible = elemento.offsetParent !== null && elemento.offsetWidth > 0;
                 if (isVisible) {
-                    this.addLog('✅ Pesquisa Material encontrado (visível)', 'success');
+                    this.addLog('✅ Pesquisa Material encontrado', 'success');
                     return elemento;
                 }
             }
@@ -798,7 +774,7 @@
             if (elemento) {
                 const isVisible = elemento.offsetParent !== null && elemento.offsetWidth > 0;
                 if (isVisible) {
-                    this.addLog('✅ Pesquisa Material encontrado por CSS (visível)', 'success');
+                    this.addLog('✅ Pesquisa Material encontrado (CSS)', 'success');
                     return elemento;
                 }
             }
@@ -808,60 +784,58 @@
                 if (input.placeholder && input.placeholder.toLowerCase().includes('material')) {
                     const isVisible = input.offsetParent !== null && input.offsetWidth > 0;
                     if (isVisible) {
-                        this.addLog(`✅ Pesquisa Material encontrado por busca: "${input.placeholder}"`, 'success');
+                        this.addLog(`✅ Pesquisa Material encontrado: "${input.placeholder}"`, 'success');
                         return input;
                     }
                 }
             }
             
-            this.addLog('❌ Pesquisa Material NÃO encontrado ou NÃO visível!', 'error');
+            this.addLog('❌ Pesquisa Material NÃO encontrado!', 'error');
             return null;
         }
         
         async preencherPesquisaMaterial(inputPesquisa, valor, descricao = '') {
             if (!inputPesquisa) {
-                this.addLog(`❌ Campo ${descricao} é nulo`, 'error');
+                this.addLog(`❌ ${descricao} é nulo`, 'error');
                 return false;
             }
             if (valor === undefined || valor === null || valor === '') {
-                this.addLog(`⏭️ ${descricao} vazio, pulando...`, 'info');
+                this.addLog(`⏭️ ${descricao} vazio`, 'info');
                 return true;
             }
             
-            this.addLog(`🔍 Preenchendo ${descricao} com: "${valor}"`, 'info');
+            this.addLog(`🔍 ${descricao}: "${valor}"`, 'info');
             
             try {
                 inputPesquisa.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                await this.wait(500);
+                await this.wait(300);
                 
                 inputPesquisa.click();
-                await this.wait(300);
+                await this.wait(150);
                 inputPesquisa.focus();
-                await this.wait(300);
+                await this.wait(150);
                 
                 inputPesquisa.value = '';
-                await this.wait(200);
+                await this.wait(100);
                 inputPesquisa.value = String(valor);
                 inputPesquisa.dispatchEvent(new Event('input', { bubbles: true }));
                 inputPesquisa.dispatchEvent(new Event('change', { bubbles: true }));
-                await this.wait(500);
+                await this.wait(300);
                 
-                this.addLog(`⌨️ Pressionando Enter para pesquisar: ${valor}`, 'info');
+                this.addLog(`⌨️ Enter para pesquisar: ${valor}`, 'info');
                 await this.pressionarEnter(inputPesquisa, 'Pesquisa Material');
                 
-                await this.wait(3000);
+                await this.wait(1500);
                 
-                const selectMaterial = await this.waitForElement(CONFIG.xpaths.selectMaterial, 3000);
+                const selectMaterial = await this.waitForElement(CONFIG.xpaths.selectMaterial, 2000);
                 if (selectMaterial && selectMaterial.value && selectMaterial.value.trim() !== '') {
-                    this.addLog(`✅ Material preenchido automaticamente: "${selectMaterial.value}"`, 'success');
-                } else {
-                    this.addLog(`⚠️ Material NÃO foi preenchido automaticamente`, 'warning');
+                    this.addLog(`✅ Material preenchido: "${selectMaterial.value}"`, 'success');
                 }
                 
                 await this.wait(CONFIG.delayAposPreencher);
                 return true;
             } catch (e) {
-                this.addLog(`❌ Erro ao preencher ${descricao}: ${e.message}`, 'error');
+                this.addLog(`❌ Erro ${descricao}: ${e.message}`, 'error');
                 return false;
             }
         }
@@ -870,11 +844,11 @@
             const isMaterial = classe && classe.toUpperCase().includes('MISC.TBRA');
             
             if (isMaterial) {
-                this.addLog(`🔍 Detectado MATERIAL (${classe}) - Aguardando expansão...`, 'info');
+                this.addLog(`🔍 MATERIAL (${classe}) - expandindo...`, 'info');
                 
                 let pesquisaVisible = false;
                 let tentativas = 0;
-                const maxTentativas = 30;
+                const maxTentativas = 20;
                 
                 while (tentativas < maxTentativas && !pesquisaVisible) {
                     const inputPesquisa = document.querySelector('input[placeholder="Material"]');
@@ -887,37 +861,37 @@
                         }
                     }
                     tentativas++;
-                    await this.wait(500);
+                    await this.wait(300);
                 }
                 
                 if (!pesquisaVisible) {
-                    this.addLog(`⚠️ Formulário não expandiu após ${maxTentativas} tentativas`, 'warning');
-                    await this.wait(2000);
+                    this.addLog(`⚠️ Formulário não expandiu`, 'warning');
+                    await this.wait(1000);
                 }
                 
                 await this.wait(CONFIG.delayExpansaoFormulario);
             } else {
-                this.addLog(`📋 Serviço detectado (${classe})`, 'info');
-                await this.wait(1000);
+                this.addLog(`📋 Serviço: ${classe}`, 'info');
+                await this.wait(500);
             }
         }
         
-        aguardarPreenchimentoAutomatico(elemento, valorEsperado, timeout = 4000) {
+        aguardarPreenchimentoAutomatico(elemento, valorEsperado, timeout = 2500) {
             return new Promise((resolve) => {
                 const startTime = Date.now();
                 const self = this;
                 function verificar() {
                     if (elemento.value && elemento.value.trim() !== '') {
-                        self.addLog(`✅ Campo preenchido automaticamente: "${elemento.value}"`, 'success');
+                        self.addLog(`✅ Item: "${elemento.value}"`, 'success');
                         resolve(true);
                         return;
                     }
                     if (Date.now() - startTime > timeout) {
-                        self.addLog(`⚠️ Campo não preenchido automaticamente`, 'warning');
+                        self.addLog(`⚠️ Item não preenchido`, 'warning');
                         resolve(false);
                         return;
                     }
-                    setTimeout(verificar, 500);
+                    setTimeout(verificar, 300);
                 }
                 verificar();
             });
@@ -935,15 +909,6 @@
                 const texto = mensagemErro.textContent.trim();
                 this.addLog(`❌ ${texto}`, 'error');
                 return { status: 'erro', mensagem: texto };
-            }
-            const mensagens = document.querySelectorAll('.alert');
-            for (const msg of mensagens) {
-                if (msg.textContent.includes('sucesso') || msg.textContent.includes('Sucesso')) {
-                    return { status: 'sucesso', mensagem: msg.textContent.trim() };
-                }
-                if (msg.textContent.includes('erro') || msg.textContent.includes('obrigatório')) {
-                    return { status: 'erro', mensagem: msg.textContent.trim() };
-                }
             }
             return null;
         }
@@ -964,8 +929,7 @@
             }
             
             const resultado = [...materiais, ...servicos];
-            this.addLog(`📊 REORDENAÇÃO: ${materiais.length} materiais (primeiro), ${servicos.length} serviços (depois)`, 'info');
-            
+            this.addLog(`📊 Reordenado: ${materiais.length} materiais, ${servicos.length} serviços`, 'info');
             return resultado;
         }
         
@@ -1000,126 +964,97 @@
             this.processador.dados = dados;
         }
         
-        // ===== EXECUÇÃO PRINCIPAL =====
+        // ===== EXECUÇÃO PRINCIPAL OTIMIZADA =====
         async executarCadastro(dados, index) {
             const idValue = dados['ID'] || dados['id'] || dados['Id'];
             const classe = dados['CLASSE'] || dados['Classe'] || '';
             const isMaterial = classe.toUpperCase().includes('MISC.TBRA');
             
-            this.addLog(`📝 === INICIANDO CADASTRO ${index + 1} ===`, 'info');
-            this.addLog(`📋 ID: ${idValue} | Classe: "${classe}" | Tipo: ${isMaterial ? 'MATERIAL' : 'SERVIÇO'}`, 'info');
+            this.addLog(`📝 ${index + 1}/${this.dados.totalRegistros} - ID: ${idValue} | ${isMaterial ? 'MATERIAL' : 'SERVIÇO'}`, 'info');
             
             if (!idValue) {
-                const erro = 'ID vazio';
-                this.addLog(`❌ Registro ${index + 1} sem ID! Pulando...`, 'error');
-                this.dados.adicionarResultado('N/A', 'pulado', 'ID vazio', dados, erro);
-                return { sucesso: false, erro: erro, pulado: true };
+                this.dados.adicionarResultado('N/A', 'pulado', 'ID vazio', dados);
+                return { sucesso: false, erro: 'ID vazio', pulado: true };
             }
             
-            // Extrai todos os dados da planilha
-            const prancha = dados['PRANCHA'] || dados['Prancha'] || '';
-            const maraCode = dados['MARACODE'] || dados['MaraCode'] || '';
-            const qtdServico = dados['QTD SERVICO EXECUTADO'] || dados['Qtd Servico Executado'] || '';
-            const pesquisaMaterial = dados['PESQUISA MATERIAL'] || dados['Pesquisa Material'] || '';
-            const qtdMaterial = dados['QTD MATERIAL'] || dados['Qtd Material'] || '';
-            const localObra = dados['LOCAL EXECUCAO OBRA'] || dados['Local Execucao Obra'] || '';
-            
-            const dadosCompletos = {
-                id: idValue,
-                classe: classe,
-                prancha: prancha,
-                maraCode: maraCode,
-                qtdServico: qtdServico,
-                pesquisaMaterial: pesquisaMaterial,
-                qtdMaterial: qtdMaterial,
-                localObra: localObra,
-                isMaterial: isMaterial
-            };
-            
-            this.addLog(`📋 Dados: Prancha="${prancha}", MaraCode="${maraCode}"`, 'info');
-            this.addLog(`📋 PesqMaterial="${pesquisaMaterial}", QtdMaterial="${qtdMaterial}", Local="${localObra}"`, 'info');
+            const prancha = dados['PRANCHA'] || '';
+            const maraCode = dados['MARACODE'] || '';
+            const qtdServico = dados['QTD SERVICO EXECUTADO'] || '';
+            const pesquisaMaterial = dados['PESQUISA MATERIAL'] || '';
+            const qtdMaterial = dados['QTD MATERIAL'] || '';
+            const localObra = dados['LOCAL EXECUCAO OBRA'] || '';
             
             try {
-                // ===== PASSO 1: COLLAPSE =====
-                const menuElement = await this.waitForElement('//span[@id="ott-sidebar-collapse"]', 5000);
+                // PASSO 1: COLLAPSE
+                const menuElement = await this.waitForElement('//span[@id="ott-sidebar-collapse"]', 3000);
                 if (!await this.clickElement(menuElement, 'Menu')) {
-                    const erro = 'Menu não encontrado';
-                    this.dados.adicionarResultado(idValue, 'erro', erro, dados, erro);
-                    return { sucesso: false, erro: erro };
+                    this.dados.adicionarResultado(idValue, 'erro', 'Menu não encontrado', dados);
+                    return { sucesso: false };
                 }
-                await this.wait(500);
+                await this.wait(200);
                 
-                // ===== PASSO 2: LISTA REQUISIÇÕES =====
-                const listaElement = await this.waitForElement('//a[@routerlink="/requisicoes-eps"]', 5000);
+                // PASSO 2: LISTA REQUISIÇÕES
+                const listaElement = await this.waitForElement('//a[@routerlink="/requisicoes-eps"]', 3000);
                 if (!await this.clickElement(listaElement, 'Lista EPS')) {
-                    const erro = 'Lista não encontrada';
-                    this.dados.adicionarResultado(idValue, 'erro', erro, dados, erro);
-                    return { sucesso: false, erro: erro };
+                    this.dados.adicionarResultado(idValue, 'erro', 'Lista não encontrada', dados);
+                    return { sucesso: false };
                 }
-                
                 await this.wait(CONFIG.delayAposNavegacao);
                 
-                // ===== PASSO 3: PREENCHER ID =====
+                // PASSO 3: ID
                 const inputId = await this.waitForIdField();
                 if (!inputId) {
                     const fallback = document.querySelector('#filtroId');
-                    if (fallback) {
-                        await this.preencherId(fallback, idValue);
-                    } else {
-                        const erro = 'Campo ID não encontrado';
-                        this.dados.adicionarResultado(idValue, 'erro', erro, dados, erro);
-                        return { sucesso: false, erro: erro };
+                    if (fallback) await this.preencherId(fallback, idValue);
+                    else {
+                        this.dados.adicionarResultado(idValue, 'erro', 'Campo ID não encontrado', dados);
+                        return { sucesso: false };
                     }
                 } else {
                     await this.preencherId(inputId, idValue);
                 }
                 
-                // ===== PASSO 4: BUSCAR =====
-                const btnBuscar = await this.waitForElement('//a[contains(@class, "btn-primary") and contains(text(), "Buscar")]', 5000);
-                if (!btnBuscar) {
+                // PASSO 4: BUSCAR
+                const btnBuscar = await this.waitForElement('//a[contains(@class, "btn-primary") and contains(text(), "Buscar")]', 3000);
+                if (btnBuscar) await this.clickElement(btnBuscar, 'Buscar');
+                else {
                     const btnCSS = document.querySelector('.btn-primary.btn-sm.btn-block');
                     if (btnCSS) await this.clickElement(btnCSS, 'Buscar');
                     else {
-                        const erro = 'Botão Buscar não encontrado';
-                        this.dados.adicionarResultado(idValue, 'erro', erro, dados, erro);
-                        return { sucesso: false, erro: erro };
+                        this.dados.adicionarResultado(idValue, 'erro', 'Botão Buscar não encontrado', dados);
+                        return { sucesso: false };
                     }
-                } else {
-                    await this.clickElement(btnBuscar, 'Buscar');
                 }
-                
                 await this.wait(CONFIG.delayAposBusca);
                 
-                // ===== PASSO 5: EDITAR =====
-                const btnEditar = await this.waitForElement('//a[contains(@title, "Editar Requisição")]', 5000);
+                // PASSO 5: EDITAR
+                const btnEditar = await this.waitForElement('//a[contains(@title, "Editar Requisição")]', 3000);
                 if (!btnEditar) {
                     const btnCSS = document.querySelector('a[title="Editar Requisição"]');
                     if (btnCSS) await this.clickElement(btnCSS, 'Editar');
                     else {
-                        this.addLog(`⚠️ ID ${idValue} sem Editar`, 'warning');
                         this.dados.adicionarResultado(idValue, 'pulado', 'Sem botão Editar', dados);
-                        return { sucesso: false, erro: 'Sem Editar', pulado: true };
+                        return { sucesso: false, pulado: true };
                     }
                 } else {
                     await this.clickElement(btnEditar, 'Editar');
                 }
                 
-                // ===== PASSO 6: SERVIÇOS =====
-                const btnServico = await this.waitForElement('//a[contains(@title, "Serviços")]', 5000);
+                // PASSO 6: SERVIÇOS
+                const btnServico = await this.waitForElement('//a[contains(@title, "Serviços")]', 3000);
                 if (!btnServico) {
                     const btnCSS = document.querySelector('a[title="Serviços"]');
                     if (btnCSS) await this.clickElement(btnCSS, 'Serviços');
                     else {
-                        const erro = 'Serviços não encontrado';
-                        this.dados.adicionarResultado(idValue, 'erro', erro, dados, erro);
-                        return { sucesso: false, erro: erro };
+                        this.dados.adicionarResultado(idValue, 'erro', 'Serviços não encontrado', dados);
+                        return { sucesso: false };
                     }
                 } else {
                     await this.clickElement(btnServico, 'Serviços');
                 }
                 
-                // ===== PASSO 7: ABA MEDIÇÃO =====
-                const abaMedicao = await this.waitForElement('//a[@role="tab" and contains(text(), "Medição de Campo")]', 5000);
+                // PASSO 7: ABA MEDIÇÃO
+                const abaMedicao = await this.waitForElement('//a[@role="tab" and contains(text(), "Medição de Campo")]', 3000);
                 if (!abaMedicao) {
                     const abas = document.querySelectorAll('a[role="tab"]');
                     let encontrada = null;
@@ -1131,16 +1066,15 @@
                     }
                     if (encontrada) await this.clickElement(encontrada, 'Aba Medição');
                     else {
-                        const erro = 'Aba não encontrada';
-                        this.dados.adicionarResultado(idValue, 'erro', erro, dados, erro);
-                        return { sucesso: false, erro: erro };
+                        this.dados.adicionarResultado(idValue, 'erro', 'Aba não encontrada', dados);
+                        return { sucesso: false };
                     }
                 } else {
                     await this.clickElement(abaMedicao, 'Aba Medição');
                 }
                 
-                // ===== PASSO 8: INSERIR MEDIÇÃO =====
-                const btnInserir = await this.waitForElement('//button[contains(text(), "Inserir Medição de Campo")]', 5000);
+                // PASSO 8: INSERIR MEDIÇÃO
+                const btnInserir = await this.waitForElement('//button[contains(text(), "Inserir Medição de Campo")]', 3000);
                 if (!btnInserir) {
                     const botoes = document.querySelectorAll('button');
                     let encontrado = null;
@@ -1152,126 +1086,83 @@
                     }
                     if (encontrado) await this.clickElement(encontrado, 'Inserir');
                     else {
-                        const erro = 'Inserir não encontrado';
-                        this.dados.adicionarResultado(idValue, 'erro', erro, dados, erro);
-                        return { sucesso: false, erro: erro };
+                        this.dados.adicionarResultado(idValue, 'erro', 'Inserir não encontrado', dados);
+                        return { sucesso: false };
                     }
                 } else {
                     await this.clickElement(btnInserir, 'Inserir');
                 }
                 
-                await this.wait(1000);
+                await this.wait(500);
                 
-                // ============================================
-                // PASSO 9: PREENCHER FORMULÁRIO
-                // ============================================
-                this.addLog(`✏️ Preenchendo formulário para ID ${idValue}`, 'info');
-                
+                // ===== PREENCHER FORMULÁRIO =====
                 // 1. PRANCHA
-                const inputPrancha = await this.waitForElement(CONFIG.xpaths.inputPrancha, 5000);
-                await this.preencherCampo(inputPrancha, dadosCompletos.prancha, 'Prancha');
+                const inputPrancha = await this.waitForElement(CONFIG.xpaths.inputPrancha, 3000);
+                await this.preencherCampo(inputPrancha, prancha, 'Prancha');
                 
                 // 2. CLASSE
-                const selectClasse = await this.waitForElement(CONFIG.xpaths.selectClasse, 5000);
-                await this.preencherCampo(selectClasse, dadosCompletos.classe, 'Classe');
+                const selectClasse = await this.waitForElement(CONFIG.xpaths.selectClasse, 3000);
+                await this.preencherCampo(selectClasse, classe, 'Classe');
                 
                 // 3. MARACODE
-                if (dadosCompletos.maraCode) {
+                if (maraCode) {
                     const inputMaraCode = await this.encontrarMaraCode();
-                    
                     if (inputMaraCode) {
                         inputMaraCode.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        await this.wait(500);
-                        inputMaraCode.click();
-                        await this.wait(300);
-                        inputMaraCode.focus();
-                        await this.wait(300);
-                        
-                        inputMaraCode.value = '';
                         await this.wait(200);
-                        inputMaraCode.value = String(dadosCompletos.maraCode);
+                        inputMaraCode.click();
+                        await this.wait(150);
+                        inputMaraCode.focus();
+                        await this.wait(150);
+                        inputMaraCode.value = '';
+                        await this.wait(100);
+                        inputMaraCode.value = String(maraCode);
                         inputMaraCode.dispatchEvent(new Event('input', { bubbles: true }));
                         inputMaraCode.dispatchEvent(new Event('change', { bubbles: true }));
-                        await this.wait(500);
-                        
+                        await this.wait(200);
                         await this.pressionarEnter(inputMaraCode, 'MaraCode');
                         
-                        const selectItem = await this.waitForElement(CONFIG.xpaths.selectItem, 5000);
+                        const selectItem = await this.waitForElement(CONFIG.xpaths.selectItem, 3000);
                         if (selectItem) {
                             await this.aguardarPreenchimentoAutomatico(selectItem, '');
-                            this.addLog(`✅ Item preenchido automaticamente: "${selectItem.value}"`, 'success');
                         }
-                        
-                        await this.aguardarExpansaoFormulario(dadosCompletos.classe);
+                        await this.aguardarExpansaoFormulario(classe);
                     }
                 }
                 
                 // 4. QTD SERVIÇO EXECUTADO
-                const inputQtdServico = await this.waitForElement(CONFIG.xpaths.inputQtdServico, 5000);
+                const inputQtdServico = await this.waitForElement(CONFIG.xpaths.inputQtdServico, 3000);
                 if (inputQtdServico) {
-                    await this.preencherQtdServico(inputQtdServico, dadosCompletos.qtdServico, 'Qtd Serviço Executado');
+                    await this.preencherQtdServico(inputQtdServico, qtdServico, 'Qtd Serviço');
                 }
                 
-                // 5. PESQUISA MATERIAL - SOMENTE PARA MATERIAIS
-                if (dadosCompletos.isMaterial && dadosCompletos.pesquisaMaterial) {
-                    this.addLog(`🔍 Buscando Pesquisa Material: "${dadosCompletos.pesquisaMaterial}"`, 'info');
+                // 5. PESQUISA MATERIAL
+                if (isMaterial && pesquisaMaterial) {
                     const inputPesquisa = await this.encontrarPesquisaMaterial();
-                    
                     if (inputPesquisa) {
-                        await this.preencherPesquisaMaterial(inputPesquisa, dadosCompletos.pesquisaMaterial, 'Pesquisa Material');
-                    } else {
-                        this.addLog(`❌ Pesquisa Material NÃO encontrado!`, 'error');
-                        await this.wait(3000);
-                        const inputPesquisa2 = await this.encontrarPesquisaMaterial();
-                        if (inputPesquisa2) {
-                            await this.preencherPesquisaMaterial(inputPesquisa2, dadosCompletos.pesquisaMaterial, 'Pesquisa Material (2ª)');
-                        }
+                        await this.preencherPesquisaMaterial(inputPesquisa, pesquisaMaterial, 'Pesquisa Material');
                     }
-                } else if (dadosCompletos.isMaterial) {
-                    this.addLog(`⚠️ MATERIAL sem Pesquisa Material!`, 'warning');
-                } else {
-                    this.addLog(`⏭️ Serviço - pulando Pesquisa Material`, 'info');
                 }
                 
-                // 6. QTD MATERIAL - SOMENTE PARA MATERIAIS
-                const inputQtdMaterial = await this.waitForElement(CONFIG.xpaths.inputQtdMaterial, 5000);
-                if (inputQtdMaterial && dadosCompletos.isMaterial) {
-                    // Verifica se o valor é um número (quantidade) e não um código
-                    if (dadosCompletos.qtdMaterial && 
-                        !dadosCompletos.qtdMaterial.includes('-') && 
-                        String(dadosCompletos.qtdMaterial) !== String(idValue)) {
-                        const valorConvertido = this.converterNumero(dadosCompletos.qtdMaterial);
-                        this.addLog(`📦 Qtd Material: "${valorConvertido}" (original: "${dadosCompletos.qtdMaterial}")`, 'info');
+                // 6. QTD MATERIAL
+                const inputQtdMaterial = await this.waitForElement(CONFIG.xpaths.inputQtdMaterial, 3000);
+                if (inputQtdMaterial && isMaterial) {
+                    if (qtdMaterial && !qtdMaterial.includes('-') && String(qtdMaterial) !== String(idValue)) {
+                        const valorConvertido = this.converterNumero(qtdMaterial);
+                        this.addLog(`📦 Qtd Material: "${valorConvertido}"`, 'info');
                         await this.preencherCampo(inputQtdMaterial, valorConvertido, 'Qtd Material');
-                    } else {
-                        this.addLog(`⏭️ Qtd Material ignorado (vazio, código ou igual ao ID)`, 'info');
                     }
-                } else if (!dadosCompletos.isMaterial) {
-                    this.addLog(`⏭️ Serviço - pulando Qtd Material`, 'info');
                 }
                 
                 // 7. LOCAL EXECUÇÃO OBRA
-                if (dadosCompletos.localObra) {
-                    this.addLog(`📍 Buscando Local Obra: "${dadosCompletos.localObra}"`, 'info');
+                if (localObra) {
                     const inputLocalObra = await this.encontrarLocalObra();
-                    
                     if (inputLocalObra) {
-                        await this.preencherLocalObraEspecifico(inputLocalObra, dadosCompletos.localObra, 'Local Execução Obra');
-                    } else {
-                        this.addLog(`❌ Local Obra NÃO encontrado!`, 'error');
-                        await this.wait(3000);
-                        const inputLocalObra2 = await this.encontrarLocalObra();
-                        if (inputLocalObra2) {
-                            await this.preencherLocalObraEspecifico(inputLocalObra2, dadosCompletos.localObra, 'Local Obra (2ª)');
-                        }
+                        await this.preencherLocalObraEspecifico(inputLocalObra, localObra, 'Local Obra');
                     }
-                } else {
-                    this.addLog(`⏭️ Local Obra vazio, pulando...`, 'info');
                 }
                 
-                // ============================================
-                // PASSO 10: SALVAR
-                // ============================================
+                // ===== SALVAR =====
                 if (!CONFIG.modoTeste) {
                     let btnSalvar = document.querySelector('button.btn.btn-primary.mt-4.float-right');
                     if (!btnSalvar) btnSalvar = document.querySelector('button[type="submit"].btn-primary.float-right');
@@ -1287,27 +1178,25 @@
                     
                     if (btnSalvar) {
                         btnSalvar.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        await this.wait(500);
+                        await this.wait(200);
                         btnSalvar.click();
-                        this.addLog(`💾 Salvando ID ${idValue}...`, 'info');
+                        this.addLog(`💾 Salvando ${idValue}...`, 'info');
                         await this.wait(CONFIG.delayAposSalvar);
                         
                         const resultado = this.verificarMensagemRetorno();
                         
-                        if (resultado) {
-                            if (resultado.status === 'sucesso') {
-                                this.dados.adicionarResultado(idValue, 'sucesso', resultado.mensagem, dados);
-                                this.addLog(`✅ ID ${idValue} SUCESSO!`, 'success');
-                            } else {
-                                this.dados.adicionarResultado(idValue, 'erro', resultado.mensagem, dados, resultado.mensagem);
-                                this.addLog(`❌ ID ${idValue} falhou: ${resultado.mensagem}`, 'error');
-                            }
+                        if (resultado && resultado.status === 'sucesso') {
+                            this.dados.adicionarResultado(idValue, 'sucesso', resultado.mensagem, dados);
+                            this.addLog(`✅ ${idValue} OK!`, 'success');
+                        } else if (resultado && resultado.status === 'erro') {
+                            this.dados.adicionarResultado(idValue, 'erro', resultado.mensagem, dados, resultado.mensagem);
+                            this.addLog(`❌ ${idValue} falhou: ${resultado.mensagem}`, 'error');
                         } else {
-                            this.addLog(`⚠️ Sem retorno para ID ${idValue}`, 'warning');
-                            this.dados.adicionarResultado(idValue, 'sucesso', 'Cadastro realizado (sem confirmação)', dados);
+                            this.dados.adicionarResultado(idValue, 'sucesso', 'Cadastro realizado', dados);
+                            this.addLog(`✅ ${idValue} OK!`, 'success');
                         }
                         
-                        // ===== FECHAR =====
+                        // FECHAR
                         let btnFechar = document.querySelector('button.btn.btn-secondary.mt-4.float-left');
                         if (!btnFechar) {
                             const botoes = document.querySelectorAll('button');
@@ -1318,33 +1207,29 @@
                                 }
                             }
                         }
-                        
                         if (btnFechar) {
                             btnFechar.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            await this.wait(500);
+                            await this.wait(200);
                             btnFechar.click();
                             await this.wait(CONFIG.delayAposFechar);
                         }
-                        
                     } else {
-                        const erro = 'Botão Salvar não encontrado';
-                        this.dados.adicionarResultado(idValue, 'erro', erro, dados, erro);
-                        return { sucesso: false, erro: erro };
+                        this.dados.adicionarResultado(idValue, 'erro', 'Botão Salvar não encontrado', dados);
+                        return { sucesso: false };
                     }
                 } else {
-                    this.addLog(`🧪 TESTE: ID ${idValue} simulado`, 'success');
-                    this.dados.adicionarResultado(idValue, 'sucesso', 'TESTE - Cadastro simulado', dados);
-                    await this.wait(2000);
+                    this.addLog(`🧪 TESTE: ${idValue} simulado`, 'success');
+                    this.dados.adicionarResultado(idValue, 'sucesso', 'TESTE', dados);
+                    await this.wait(1000);
                 }
                 
-                this.addLog(`📝 === CADASTRO ${index + 1} FINALIZADO ===`, 'info');
                 return { sucesso: true };
                 
             } catch (error) {
                 const erroMsg = error.message || 'Erro desconhecido';
-                this.addLog(`❌ ID ${idValue}: ${erroMsg}`, 'error');
+                this.addLog(`❌ ${idValue}: ${erroMsg}`, 'error');
                 this.dados.adicionarResultado(idValue, 'erro', erroMsg, dados, erroMsg);
-                return { sucesso: false, erro: erroMsg };
+                return { sucesso: false };
             }
         }
         
@@ -1354,7 +1239,7 @@
                 return;
             }
             if (this.dados.totalRegistros === 0) {
-                this.addLog('⚠️ Nenhum dado para cadastrar!', 'error');
+                this.addLog('⚠️ Nenhum dado!', 'error');
                 return;
             }
             
@@ -1364,43 +1249,32 @@
             this.dados.relatorio = [];
             this.dados.contadores = { sucessos: 0, erros: 0, pulados: 0 };
             
-            this.addLog(`🚀 === INICIANDO AUTOMAÇÃO ===`, 'info');
-            this.addLog(`📋 Total de registros: ${this.dados.totalRegistros}`, 'info');
-            this.addLog(`📋 Modo: ${CONFIG.modoTeste ? 'TESTE' : 'PRODUÇÃO'}`, 'info');
+            this.addLog(`🚀 Iniciando ${this.dados.totalRegistros} cadastros (RÁPIDO)`, 'info');
             
             const logContainer = document.getElementById('auto-log');
             if (logContainer) logContainer.innerHTML = '';
             
             for (let i = 0; i < this.dados.totalRegistros; i++) {
                 if (this.podeParar) {
-                    this.addLog('⏹️ Interrompido pelo usuário', 'warning');
+                    this.addLog('⏹️ Interrompido', 'warning');
                     break;
                 }
                 
                 const dados = this.dados.registros[i];
-                const idExibicao = dados['ID'] || dados['id'] || dados['Id'] || i + 1;
-                
-                this.addLog(`📌 === CADASTRO ${i + 1}/${this.dados.totalRegistros} ===`, 'info');
-                this.atualizarProgresso(i + 1, this.dados.totalRegistros);
-                
-                try {
-                    await this.executarCadastro(dados, i);
-                } catch (error) {
-                    this.addLog(`❌ Erro: ${error.message}`, 'error');
-                    this.dados.adicionarResultado(idExibicao, 'erro', error.message, dados, error.message);
-                }
+                await this.executarCadastro(dados, i);
                 
                 if (i < this.dados.totalRegistros - 1 && !this.podeParar) {
-                    this.addLog(`⏳ Aguardando ${CONFIG.delayEntreCadastros}ms...`, 'info');
+                    this.atualizarProgresso(i + 1, this.dados.totalRegistros);
                     await this.wait(CONFIG.delayEntreCadastros);
                 }
             }
             
             this.estaExecutando = false;
             
-            this.addLog(`✅ === AUTOMAÇÃO FINALIZADA ===`, 'success');
-            this.addLog(`📊 Resultado: ${this.dados.contadores.sucessos} sucessos, ${this.dados.contadores.erros} erros, ${this.dados.contadores.pulados} pulados`, 'info');
-            this.addLog(`📊 Relatório gerado com ${this.dados.relatorio.length} registros`, 'info');
+            this.atualizarProgresso(this.dados.totalRegistros, this.dados.totalRegistros);
+            
+            this.addLog(`✅ Finalizado! ${this.dados.contadores.sucessos} OK, ${this.dados.contadores.erros} ERRO, ${this.dados.contadores.pulados} PULADO`, 'success');
+            this.addLog(`📊 Relatório: ${this.dados.relatorio.length} registros`, 'info');
             
             document.getElementById('popup-btn-iniciar').disabled = false;
             document.getElementById('popup-btn-parar').disabled = true;
@@ -1441,43 +1315,35 @@
             const alerta = document.createElement('div');
             alerta.style.cssText = `
                 position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-                z-index: 99999; background: white; padding: 30px 40px; border-radius: 12px;
-                box-shadow: 0 20px 60px rgba(0,0,0,0.3); min-width: 400px; max-width: 500px;
+                z-index: 99999; background: white; padding: 25px 35px; border-radius: 12px;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.3); min-width: 350px; max-width: 450px;
                 text-align: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                animation: alertaFadeIn 0.4s ease;
+                animation: alertaFadeIn 0.3s ease;
             `;
             
             const icon = erros > 0 ? '⚠️' : '✅';
             const cor = erros > 0 ? '#dc3545' : '#28a745';
-            const titulo = erros > 0 ? 'Processo Finalizado com Alertas!' : 'Processo Finalizado com Sucesso!';
+            const titulo = erros > 0 ? 'Finalizado com Alertas!' : 'Finalizado com Sucesso!';
             
             alerta.innerHTML = `
-                <div style="font-size: 48px; margin-bottom: 10px;">${icon}</div>
-                <h2 style="color: ${cor}; margin: 0 0 15px 0; font-size: 22px;">${titulo}</h2>
-                <div style="display: flex; gap: 15px; justify-content: center; margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;">
-                    <div><div style="font-size: 28px; font-weight: 600; color: #28a745;">${sucessos}</div><div style="font-size: 12px; color: #6c757d;">✅ Sucessos</div></div>
-                    <div><div style="font-size: 28px; font-weight: 600; color: #dc3545;">${erros}</div><div style="font-size: 12px; color: #6c757d;">❌ Erros</div></div>
-                    <div><div style="font-size: 28px; font-weight: 600; color: #ffc107;">${pulados}</div><div style="font-size: 12px; color: #6c757d;">⏭️ Pulados</div></div>
-                    <div><div style="font-size: 28px; font-weight: 600; color: #17a2b8;">${total}</div><div style="font-size: 12px; color: #6c757d;">📊 Total</div></div>
+                <div style="font-size: 40px; margin-bottom: 8px;">${icon}</div>
+                <h2 style="color: ${cor}; margin: 0 0 12px 0; font-size: 20px;">${titulo}</h2>
+                <div style="display: flex; gap: 12px; justify-content: center; margin: 15px 0; padding: 12px; background: #f8f9fa; border-radius: 8px;">
+                    <div><div style="font-size: 24px; font-weight: 600; color: #28a745;">${sucessos}</div><div style="font-size: 11px; color: #6c757d;">✅ Sucessos</div></div>
+                    <div><div style="font-size: 24px; font-weight: 600; color: #dc3545;">${erros}</div><div style="font-size: 11px; color: #6c757d;">❌ Erros</div></div>
+                    <div><div style="font-size: 24px; font-weight: 600; color: #ffc107;">${pulados}</div><div style="font-size: 11px; color: #6c757d;">⏭️ Pulados</div></div>
+                    <div><div style="font-size: 24px; font-weight: 600; color: #17a2b8;">${total}</div><div style="font-size: 11px; color: #6c757d;">📊 Total</div></div>
                 </div>
-                <div style="font-size: 13px; color: #6c757d; margin-bottom: 15px;">Clique em "Ver Relatório" para detalhes</div>
                 <div style="display: flex; gap: 10px; justify-content: center;">
-                    <button id="btn-alerta-fechar" style="padding: 8px 25px; background: #6c757d; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">Fechar</button>
-                    <button id="btn-alerta-relatorio" style="padding: 8px 25px; background: #17a2b8; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">📊 Ver Relatório</button>
+                    <button id="btn-alerta-fechar" style="padding: 6px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;">Fechar</button>
+                    <button id="btn-alerta-relatorio" style="padding: 6px 20px; background: #17a2b8; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;">📊 Relatório</button>
                 </div>
             `;
             document.body.appendChild(alerta);
             
-            if (!document.getElementById('alerta-styles')) {
-                const style = document.createElement('style');
-                style.id = 'alerta-styles';
-                style.textContent = `@keyframes alertaFadeIn { from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }`;
-                document.head.appendChild(style);
-            }
-            
             const overlay = document.createElement('div');
             overlay.id = 'alerta-overlay';
-            overlay.style.cssText = `position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 99998; animation: alertaFadeIn 0.3s ease;`;
+            overlay.style.cssText = `position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 99998; animation: alertaFadeIn 0.3s ease;`;
             document.body.appendChild(overlay);
             
             document.getElementById('btn-alerta-fechar').addEventListener('click', () => { alerta.remove(); overlay.remove(); });
@@ -1497,7 +1363,7 @@
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            this.addLog(`📥 Relatório baixado com ${this.dados.relatorio.length} registros`, 'success');
+            this.addLog(`📥 Relatório baixado!`, 'success');
         }
         
         // ===== INTERFACE =====
@@ -1543,16 +1409,6 @@
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
             `;
             
-            botao.addEventListener('mouseenter', function() {
-                this.style.transform = 'translateY(-1px)';
-                this.style.boxShadow = '0 4px 12px rgba(40, 167, 69, 0.4)';
-            });
-            
-            botao.addEventListener('mouseleave', function() {
-                this.style.transform = 'translateY(0)';
-                this.style.boxShadow = '0 2px 4px rgba(40, 167, 69, 0.3)';
-            });
-            
             botao.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -1561,7 +1417,7 @@
             
             container.appendChild(botao);
             usernameSpan.parentNode.insertBefore(container, usernameSpan.nextSibling);
-            console.log('✅ Botão "Input Serviço/Materiais" adicionado!');
+            console.log('✅ Botão adicionado!');
         }
         
         togglePopup() {
@@ -1589,22 +1445,11 @@
             const popup = document.createElement('div');
             popup.id = 'auto-popup';
             popup.style.cssText = `
-                position: fixed;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                z-index: 10000;
-                background: white;
-                padding: 20px;
-                border-radius: 12px;
-                box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-                min-width: 480px;
-                max-width: 600px;
-                max-height: 85vh;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                border: 1px solid #e0e0e0;
-                display: none;
-                flex-direction: column;
+                position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                z-index: 10000; background: white; padding: 20px; border-radius: 12px;
+                box-shadow: 0 10px 40px rgba(0,0,0,0.3); min-width: 460px; max-width: 560px;
+                max-height: 85vh; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                border: 1px solid #e0e0e0; display: none; flex-direction: column;
                 animation: popupFadeIn 0.3s ease;
             `;
             
@@ -1614,131 +1459,60 @@
                         <span style="font-size: 22px;">⚡</span>
                         <h3 style="margin: 0; color: #212529; font-size: 16px;">Automação Serviços</h3>
                     </div>
-                    <button id="btn-fechar-popup" style="
-                        background: none;
-                        border: none;
-                        font-size: 22px;
-                        cursor: pointer;
-                        color: #6c757d;
-                        padding: 0 6px;
-                        transition: all 0.3s ease;
-                        line-height: 1;
-                    " title="Fechar">✕</button>
+                    <button id="btn-fechar-popup" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6c757d;padding:0 6px;">✕</button>
                 </div>
                 
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px; padding: 8px 12px; background: #f8f9fa; border-radius: 6px; border: 1px solid #e9ecef;">
-                    <span class="status-indicator" id="popup-status-indicator" style="
-                        display: inline-block;
-                        width: 8px;
-                        height: 8px;
-                        border-radius: 50%;
-                        background: #28a745;
-                    "></span>
-                    <span id="popup-status-text" style="color: #495057; font-weight: 500;">Pronto</span>
-                    <span style="margin-left: auto; color: #6c757d; font-size: 11px;" id="popup-tempo-estimado"></span>
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px; padding: 6px 12px; background: #f8f9fa; border-radius: 6px;">
+                    <span class="status-indicator" id="popup-status-indicator" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#28a745;"></span>
+                    <span id="popup-status-text" style="color:#495057;font-weight:500;">Pronto</span>
                 </div>
                 
-                <div id="popup-upload-area" style="
-                    border: 2px dashed #dee2e6;
-                    border-radius: 6px;
-                    padding: 15px;
-                    text-align: center;
-                    cursor: pointer;
-                    transition: all 0.3s ease;
-                    background: #f8f9fa;
-                    margin-bottom: 10px;
-                ">
-                    <div style="font-size: 28px; margin-bottom: 4px;">📊</div>
-                    <div style="font-size: 13px; color: #495057;">
-                        <strong>Clique para selecionar</strong> ou arraste seu CSV
-                    </div>
-                    <div style="font-size: 11px; color: #6c757d;">Suporta: .csv, .txt</div>
+                <div id="popup-upload-area" style="border:2px dashed #dee2e6;border-radius:6px;padding:12px;text-align:center;cursor:pointer;transition:all 0.3s;background:#f8f9fa;margin-bottom:10px;">
+                    <div style="font-size:24px;margin-bottom:4px;">📊</div>
+                    <div style="font-size:13px;color:#495057;"><strong>Clique</strong> ou arraste seu CSV</div>
+                    <div style="font-size:11px;color:#6c757d;">.csv, .txt</div>
                     <input type="file" id="popup-file-input" accept=".csv,.txt" style="display:none">
                 </div>
                 
-                <div id="popup-file-info" style="
-                    background: #f8fff9;
-                    padding: 6px 12px;
-                    border-radius: 4px;
-                    border-left: 3px solid #28a745;
-                    display: none;
-                    margin-bottom: 8px;
-                    font-size: 12px;
-                ">
-                    <span id="popup-file-name" style="font-weight: 500;">arquivo.csv</span>
-                    <span id="popup-file-size" style="color: #6c757d; margin-left: 8px;">0 KB</span>
-                    <span id="popup-file-rows" style="color: #28a745; margin-left: 8px;">0 linhas</span>
+                <div id="popup-file-info" style="background:#f8fff9;padding:4px 12px;border-radius:4px;border-left:3px solid #28a745;display:none;margin-bottom:8px;font-size:12px;">
+                    <span id="popup-file-name" style="font-weight:500;">arquivo.csv</span>
+                    <span id="popup-file-size" style="color:#6c757d;margin-left:8px;">0 KB</span>
+                    <span id="popup-file-rows" style="color:#28a745;margin-left:8px;">0 linhas</span>
                 </div>
                 
-                <div id="popup-preview" style="
-                    max-height: 100px;
-                    overflow: auto;
-                    background: white;
-                    border-radius: 4px;
-                    border: 1px solid #e9ecef;
-                    padding: 6px;
-                    display: none;
-                    margin-bottom: 8px;
-                    font-size: 11px;
-                ">
+                <div id="popup-preview" style="max-height:80px;overflow:auto;background:white;border-radius:4px;border:1px solid #e9ecef;padding:6px;display:none;margin-bottom:8px;font-size:10px;">
                     <div id="popup-preview-content"></div>
                 </div>
                 
-                <div id="popup-stats" style="
-                    display: none;
-                    gap: 8px;
-                    padding: 6px 10px;
-                    background: white;
-                    border-radius: 4px;
-                    border: 1px solid #e9ecef;
-                    margin-bottom: 8px;
-                ">
-                    <div style="display: flex; gap: 8px; font-size: 12px;">
-                        <div style="flex:1;text-align:center;">
-                            <span style="font-weight:600;color:#28a745;" id="popup-total-rows">0</span>
-                            <span style="color:#6c757d;"> registros</span>
-                        </div>
-                        <div style="flex:1;text-align:center;">
-                            <span style="font-weight:600;color:#28a745;" id="popup-total-cols">0</span>
-                            <span style="color:#6c757d;"> campos</span>
-                        </div>
+                <div id="popup-stats" style="display:none;gap:8px;padding:6px;background:white;border-radius:4px;border:1px solid #e9ecef;margin-bottom:8px;">
+                    <div style="display:flex;gap:8px;font-size:12px;text-align:center;">
+                        <div style="flex:1;"><span style="font-weight:600;color:#28a745;" id="popup-total-rows">0</span> registros</div>
+                        <div style="flex:1;"><span style="font-weight:600;color:#28a745;" id="popup-total-cols">0</span> campos</div>
                     </div>
                 </div>
                 
-                <div style="margin-bottom: 8px;">
-                    <div style="height:20px;background:#e9ecef;border-radius:4px;overflow:hidden;">
-                        <div id="auto-progresso" style="width:0%;height:100%;background:#28a745;transition:width 0.3s;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:bold;">0%</div>
+                <div style="margin-bottom:8px;">
+                    <div style="height:18px;background:#e9ecef;border-radius:4px;overflow:hidden;">
+                        <div id="auto-progresso" style="width:0%;height:100%;background:#28a745;transition:width 0.3s;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:bold;">0%</div>
                     </div>
                 </div>
                 
-                <div id="auto-log" style="
-                    flex: 1;
-                    overflow-y: auto;
-                    font-size: 11px;
-                    background: #f8f9fa;
-                    border-radius: 4px;
-                    padding: 6px;
-                    margin-bottom: 8px;
-                    min-height: 80px;
-                    max-height: 150px;
-                    font-family: monospace;
-                    border: 1px solid #e9ecef;
-                ">
+                <div id="auto-log" style="flex:1;overflow-y:auto;font-size:10px;background:#f8f9fa;border-radius:4px;padding:4px;margin-bottom:8px;min-height:60px;max-height:120px;font-family:monospace;border:1px solid #e9ecef;">
                     <div style="color:#6c757d;">Aguardando início...</div>
                 </div>
                 
-                <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px;">
-                    <button id="popup-btn-iniciar" style="flex:1;padding:6px 10px;background:#28a745;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;transition:all 0.3s;" disabled>▶️ Iniciar</button>
-                    <button id="popup-btn-parar" style="flex:1;padding:6px 10px;background:#dc3545;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;transition:all 0.3s;" disabled>⏹️ Parar</button>
-                    <button id="popup-btn-limpar" style="flex:0 0 auto;padding:6px 10px;background:#6c757d;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;" title="Limpar dados">🗑️</button>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+                    <button id="popup-btn-iniciar" style="flex:1;padding:5px 10px;background:#28a745;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;" disabled>▶️ Iniciar</button>
+                    <button id="popup-btn-parar" style="flex:1;padding:5px 10px;background:#dc3545;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;" disabled>⏹️ Parar</button>
+                    <button id="popup-btn-limpar" style="flex:0 0 auto;padding:5px 10px;background:#6c757d;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">🗑️</button>
                 </div>
                 
-                <div style="display: flex; gap: 6px; margin-bottom: 6px;">
-                    <button id="popup-btn-relatorio" style="flex:1;padding:6px 10px;background:#17a2b8;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;transition:all 0.3s;" disabled>📊 Relatório</button>
-                    <button id="popup-btn-exportar-log" style="flex:1;padding:6px 10px;background:#6c757d;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;transition:all 0.3s;">📥 Exportar Log</button>
+                <div style="display:flex;gap:6px;margin-bottom:6px;">
+                    <button id="popup-btn-relatorio" style="flex:1;padding:5px 10px;background:#17a2b8;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;" disabled>📊 Relatório</button>
+                    <button id="popup-btn-exportar-log" style="flex:1;padding:5px 10px;background:#6c757d;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">📥 Log</button>
                 </div>
                 
-                <div style="display:flex;gap:8px;font-size:11px;color:#6c757d;align-items:center;margin-bottom:4px;">
+                <div style="display:flex;gap:8px;font-size:11px;color:#6c757d;align-items:center;">
                     <span id="popup-info-cadastros">0 carregados</span>
                     <label style="margin-left:auto;display:flex;align-items:center;gap:4px;cursor:pointer;">
                         <input type="checkbox" id="popup-modo-teste" ${CONFIG.modoTeste ? 'checked' : ''}>
@@ -1753,20 +1527,18 @@
                 const style = document.createElement('style');
                 style.id = 'popup-styles';
                 style.textContent = `
-                    @keyframes popupFadeIn {
-                        from { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
-                        to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-                    }
-                    .log-entry { padding: 2px 4px; border-bottom: 1px solid #f1f3f5; font-size: 10px; }
+                    @keyframes popupFadeIn { from { opacity:0; transform:translate(-50%,-50%) scale(0.95); } to { opacity:1; transform:translate(-50%,-50%) scale(1); } }
+                    @keyframes alertaFadeIn { from { opacity:0; transform:translate(-50%,-50%) scale(0.9); } to { opacity:1; transform:translate(-50%,-50%) scale(1); } }
+                    .log-entry { padding:1px 4px; border-bottom:1px solid #f1f3f5; font-size:9px; }
                     .log-success { color: #28a745; }
                     .log-error { color: #dc3545; }
                     .log-warning { color: #ffc107; }
                     .log-info { color: #17a2b8; }
                     #popup-upload-area:hover { border-color: #28a745; background: #f0fff4; }
                     #popup-upload-area.dragover { border-color: #28a745; background: #f0fff4; }
-                    #popup-preview::-webkit-scrollbar, #auto-log::-webkit-scrollbar { width: 4px; }
-                    #popup-preview::-webkit-scrollbar-track, #auto-log::-webkit-scrollbar-track { background: #f1f1f1; border-radius:2px; }
-                    #popup-preview::-webkit-scrollbar-thumb, #auto-log::-webkit-scrollbar-thumb { background: #888; border-radius:2px; }
+                    #popup-preview::-webkit-scrollbar, #auto-log::-webkit-scrollbar { width:3px; }
+                    #popup-preview::-webkit-scrollbar-track, #auto-log::-webkit-scrollbar-track { background:#f1f1f1; border-radius:2px; }
+                    #popup-preview::-webkit-scrollbar-thumb, #auto-log::-webkit-scrollbar-thumb { background:#888; border-radius:2px; }
                 `;
                 document.head.appendChild(style);
             }
@@ -1782,8 +1554,6 @@
             
             const uploadArea = document.getElementById('popup-upload-area');
             const fileInput = document.getElementById('popup-file-input');
-            
-            self.fileInput = fileInput;
             
             uploadArea.addEventListener('click', () => fileInput.click());
             
@@ -1802,30 +1572,22 @@
                 const files = e.dataTransfer.files;
                 if (files.length > 0) {
                     fileInput.files = files;
-                    const event = new Event('change', { bubbles: true });
-                    fileInput.dispatchEvent(event);
+                    fileInput.dispatchEvent(new Event('change'));
                 }
             });
             
-            fileInput.addEventListener('change', function(e) {
+            fileInput.addEventListener('change', function() {
                 const file = this.files[0];
-                if (!file) {
-                    console.log('⚠️ Nenhum arquivo selecionado');
-                    return;
-                }
-                
-                console.log(`📄 Arquivo selecionado: ${file.name}`);
+                if (!file) return;
                 
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     try {
                         const texto = e.target.result;
-                        console.log(`📄 Tamanho do arquivo: ${texto.length} caracteres`);
-                        
                         const dados = self.processarCSV(texto);
                         
                         if (dados.length === 0) {
-                            self.setStatusPopup('⚠️ Nenhum dado encontrado no CSV', 'error');
+                            self.setStatusPopup('⚠️ Nenhum dado', 'error');
                             return;
                         }
                         
@@ -1838,19 +1600,10 @@
                         const dadosMapeados = self.getDadosMapeados();
                         const dadosReordenados = self.reordenarDados(dadosMapeados);
                         self.processarDadosPopup(dadosReordenados);
-                        
                     } catch (error) {
-                        console.error('❌ Erro ao processar CSV:', error);
                         self.setStatusPopup('❌ Erro: ' + error.message, 'error');
-                        self.addLog(`❌ Erro ao processar CSV: ${error.message}`, 'error');
                     }
                 };
-                
-                reader.onerror = function() {
-                    self.setStatusPopup('❌ Erro ao ler o arquivo', 'error');
-                    self.addLog('❌ Erro ao ler o arquivo', 'error');
-                };
-                
                 reader.readAsText(file);
             });
             
@@ -1860,8 +1613,6 @@
                     document.getElementById('popup-btn-iniciar').disabled = true;
                     document.getElementById('popup-btn-parar').disabled = false;
                     document.getElementById('popup-btn-relatorio').disabled = true;
-                } else {
-                    self.addLog('⚠️ Importe um arquivo primeiro!', 'error');
                 }
             });
             
@@ -1869,7 +1620,6 @@
                 self.podeParar = true;
                 document.getElementById('popup-btn-parar').disabled = true;
                 document.getElementById('popup-btn-iniciar').disabled = false;
-                self.addLog('⏹️ Parando...', 'warning');
             });
             
             document.getElementById('popup-btn-limpar').addEventListener('click', () => {
@@ -1880,14 +1630,12 @@
                 self.atualizarProgresso(0, 1);
                 document.getElementById('popup-info-cadastros').textContent = '0 carregados';
                 document.getElementById('popup-status-text').textContent = 'Pronto';
-                document.getElementById('popup-status-text').style.color = '#495057';
                 document.getElementById('auto-log').innerHTML = '<div style="color:#6c757d;">Dados limpos</div>';
                 document.getElementById('popup-file-info').style.display = 'none';
                 document.getElementById('popup-preview').style.display = 'none';
                 document.getElementById('popup-stats').style.display = 'none';
                 document.getElementById('popup-btn-iniciar').disabled = true;
                 document.getElementById('popup-btn-relatorio').disabled = true;
-                self.addLog('🗑️ Dados limpos!', 'info');
                 chrome.storage.local.remove('dadosUltimos');
             });
             
@@ -1896,36 +1644,18 @@
             });
             
             document.getElementById('popup-btn-exportar-log').addEventListener('click', () => {
-                const logText = self.log.map(entry => 
-                    `[${entry.timestamp}] ${entry.mensagem}`
-                ).join('\n');
-                
-                let textoCompleto = logText;
-                if (self.dados.relatorio.length > 0) {
-                    textoCompleto += '\n\n========================================\n';
-                    textoCompleto += 'RESUMO DO RELATÓRIO:\n';
-                    textoCompleto += '========================================\n';
-                    textoCompleto += `✅ Sucessos: ${self.dados.contadores.sucessos}\n`;
-                    textoCompleto += `❌ Erros: ${self.dados.contadores.erros}\n`;
-                    textoCompleto += `⏭️ Pulados: ${self.dados.contadores.pulados}\n`;
-                    textoCompleto += `📊 Total: ${self.dados.relatorio.length}\n`;
-                }
-                
-                const blob = new Blob([textoCompleto], { type: 'text/plain;charset=utf-8' });
+                const logText = self.log.map(entry => `[${entry.timestamp}] ${entry.mensagem}`).join('\n');
+                const blob = new Blob([logText], { type: 'text/plain;charset=utf-8' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `log_completo_${new Date().toISOString().slice(0,10)}.txt`;
-                document.body.appendChild(a);
+                a.download = `log_${new Date().toISOString().slice(0,10)}.txt`;
                 a.click();
-                document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-                self.addLog('📥 Log exportado!', 'success');
             });
             
             document.getElementById('popup-modo-teste').addEventListener('change', function() {
                 CONFIG.modoTeste = this.checked;
-                self.addLog(`🧪 Modo teste ${this.checked ? 'ativado' : 'desativado'}`, 'info');
                 chrome.storage.local.set({ modoTeste: this.checked });
             });
         }
@@ -1954,11 +1684,10 @@
             document.getElementById('popup-info-cadastros').textContent = `${this.dados.totalRegistros} carregados`;
             document.getElementById('popup-btn-iniciar').disabled = false;
             document.getElementById('popup-btn-relatorio').disabled = true;
-            document.getElementById('popup-status-text').textContent = `✅ ${this.dados.totalRegistros} registros carregados`;
+            document.getElementById('popup-status-text').textContent = `✅ ${this.dados.totalRegistros} registros`;
             document.getElementById('popup-status-text').style.color = '#28a745';
             
             this.showPreviewPopup(this.dados.registros);
-            
             chrome.storage.local.set({ dadosUltimos: this.dados.registros });
             this.addLog(`📊 ${this.dados.totalRegistros} registros carregados!`, 'success');
         }
@@ -1972,14 +1701,14 @@
             document.getElementById('popup-preview').style.display = 'block';
             const headers = Object.keys(data[0]);
             
-            let html = '<table style="width:100%;font-size:10px;border-collapse:collapse;">';
+            let html = '<table style="width:100%;font-size:9px;border-collapse:collapse;">';
             html += '<thead><tr>';
             headers.forEach(h => {
                 html += `<th style="background:#f8f9fa;padding:2px 4px;text-align:left;border-bottom:1px solid #dee2e6;">${h}</th>`;
             });
             html += '</tr></thead><tbody>';
             
-            const maxRows = Math.min(5, data.length);
+            const maxRows = Math.min(3, data.length);
             for (let i = 0; i < maxRows; i++) {
                 html += '<tr>';
                 headers.forEach(h => {
@@ -2009,7 +1738,6 @@
             }
             if (result.dadosUltimos && result.dadosUltimos.length > 0) {
                 automacao.dados.carregarDados(result.dadosUltimos);
-                console.log(`📊 ${automacao.dados.totalRegistros} registros carregados do storage`);
             }
         });
         
@@ -2026,7 +1754,7 @@
         });
         observer.observe(document.body, { childList: true, subtree: true });
         
-        console.log('⚡ Automação com Orientação a Objetos inicializada!');
+        console.log('⚡ Automação OTIMIZADA inicializada!');
     }
     
     // ===== ESCUTA MENSAGENS =====
